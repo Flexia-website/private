@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Video Library{% endblock %}
+{% block content %}
+<div class="glass form">
+  <h3>Add Video</h3>
+  <form method="POST" enctype="multipart/form-data">
+    <label>Title</label><input name="title" required>
+    <label>Video File</label><input type="file" name="video" accept="video/*" required>
+    <label>Thumbnail</label><input type="file" name="thumbnail" accept="image/*">
+    <button class="btn btn-primary glow">Add</button>
+  </form>
+</div>
+<h3 class="section-title">All Videos</h3>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Thumbnail</th><th>Title</th><th>Active</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for v in vids %}
+      <tr>
+        <td>{% if v.thumbnail %}<img class="avatar sm" src="{{ v.thumbnail }}">{% else %}-{% endif %}</td>
+        <td>{{ v.title }}</td>
+        <td>{{ 'Yes' if v.active else 'No' }}</td>
+        <td class="actions">
+          <form method="POST" action="{{ url_for('admin.toggle_video', vid=v.id) }}" style="display:inline"><button class="btn btn-ghost xs">Toggle</button></form>
+          <form method="POST" action="{{ url_for('admin.delete_video', vid=v.id) }}" style="display:inline" onsubmit="return confirm('Delete?')"><button class="btn btn-ghost xs">Delete</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

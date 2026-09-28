@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Chat | PRIVATE CHAT{% endblock %}
+{% block body_class %}app-bg chat-bg{% endblock %}
+{% block content %}
+<div class="chat-shell">
+  <header class="chat-header">
+    <a href="{{ url_for('user.home') }}" class="back"><i class="fa-solid fa-arrow-left"></i></a>
+    <div class="chat-peer">
+      {% if peer.profile_photo %}<img src="{{ peer.profile_photo }}" class="avatar">{% else %}<div class="avatar avatar-fallback">{{ peer.full_name[0] }}</div>{% endif %}
+      <div>
+        {% from "base.html" import verified_badge with context %}
+        <div class="peer-name"><span class="name-with-badge">{{ peer.full_name }}{% if peer.verified %}{{ verified_badge('') }}{% endif %}</span></div>
+        <small id="status" class="muted">online</small>
+      </div>
+    </div>
+    <div class="chat-actions">
+      <button onclick="startCall('voice')" class="icon-btn"><i class="fa-solid fa-phone"></i></button>
+      <button onclick="startCall('video')" class="icon-btn"><i class="fa-solid fa-video"></i></button>
+    </div>
+  </header>
+  <div id="messages" class="messages">
+    {% for m in messages %}
+      <div class="msg {{ 'mine' if m.sender_id == user.id else 'theirs' }}">
+        {% if m.message_type == 'image' and m.media_url %}
+          <img src="{{ m.media_url }}" class="msg-media">
+        {% elif m.message_type == 'video' and m.media_url and m.sender_id == user.id %}
+          <video src="{{ m.media_url }}" controls class="msg-media"></video>
+        {% elif m.message_type == 'video' and m.media_url %}
+          <div class="msg-text">[Video sent]</div>
+        {% elif m.message_type == 'voice' and m.media_url %}
+          <div class="voice-note">
+            <i class="fa-solid fa-microphone voice-note-icon"></i>
+            <audio src="{{ m.media_url }}" controls></audio>
+          </div>
+        {% else %}
+          <div class="msg-text">{{ m.message }}</div>
+        {% endif %}
+        <div class="msg-meta">{{ m.created_at.strftime('%H:%M') }} {% if m.sender_id == user.id %}<span class="ticks">{% if m.read_status %}<i class="fa-solid fa-check-double"></i>{% else %}<i class="fa-solid fa-check"></i>{% endif %}</span>{% endif %}</div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="composer">
+    <button class="icon-btn" onclick="document.getElementById('file').click()"><i class="fa-solid fa-plus"></i></button>
+    <input type="file" id="file" hidden onchange="uploadFile(this)">
+    <button class="icon-btn" id="voiceBtn" title="Record voice note" onclick="toggleVoiceRecording()"><i class="fa-solid fa-microphone"></i></button>
+    <input id="input" placeholder="Type a message" onkeydown="if(event.key==='Enter') sendMsg()">
+    <button class="icon-btn primary" onclick="sendMsg()"><i class="fa-solid fa-paper-plane"></i></button>
+  </div>
+  <div id="callModal" class="modal hidden">
+    <div class="modal-content glass">
+      <div class="pf-avatar-lg">
+        {% if peer.profile_photo %}<img src="{{ peer.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ peer.full_name[0] }}</div>{% endif %}
+      </div>
+      <h3 id="callName">{{ peer.full_name }}</h3>
+      <p id="callStatus" class="muted">Calling...</p>
+      <video id="remoteVideo" autoplay playsinline disablePictureInPicture disableRemotePlayback controlsList="nodownload noplaybackrate nofullscreen" oncontextmenu="return false" tabindex="-1" class="hidden video-call"></video>
+      <video id="localVideo" autoplay muted class="hidden self-video"></video>
+      <div class="call-controls">
+        <button class="icon-btn" onclick="toggleMute()"><i class="fa-solid fa-microphone"></i></button>
+        <button class="icon-btn" onclick="toggleSpeaker()"><i class="fa-solid fa-volume-high"></i></button>
+        <button class="icon-btn danger" onclick="endCall()"><i class="fa-solid fa-phone-slash"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+const ME = {{ user.id }};
+const PEER = {{ peer.id }};
+const socket = io();
+socket.on('connect', () => socket.emit('join', {}));
+const msgs = document.getElementById('messages');
+function addMsg(m) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + (m.sender_id == ME ? 'mine' : 'theirs');
+  // Only show videos for user's own messages, hide from other side
+  if (m.type === 'image' && m.media) div.innerHTML = '<img src="' + m.media + '" class="msg-media">';
+  else if (m.type === 'video' && m.media && m.sender_id == ME) div.innerHTML = '<video src="' + m.media + '" controls class="msg-media"></video>';
+  else if (m.type === 'voice' && m.media) div.innerHTML = '<div class="voice-note"><i class="fa-solid fa-microphone voice-note-icon"></i><audio src="' + m.media + '" controls></audio></div>';
+  else if (m.type === 'video' && m.media) div.innerHTML = '<div class="msg-text">[Video sent]</div>'; // Hide video from other user
+  else div.innerHTML = '<div class="msg-text">' + escapeHtml(m.message) + '</div>';
+  div.innerHTML += '<div class="msg-meta">' + new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</div>';
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+}
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+socket.on('message', m => { if (m.sender_id !== ME) { addMsg(m); socket.emit('read', {peer: m.sender_id}); } });
+msgs.scrollTop = msgs.scrollHeight;
+function sendMsg() {
+  const inp = document.getElementById('input');
+  const v = inp.value.trim(); 
+  if (!v) return;
+  
+  // Optimistically add message to UI
+  const optimisticMsg = {
+    id: 'temp_' + Date.now(),
+    sender_id: ME, 
+    receiver_id: PEER,
+    message: v, 
+    type: 'text', 
+    created_at: new Date().toISOString(),
+    read_status: false
+  };
+  addMsg(optimisticMsg);
+  inp.value = '';
+  
+  // Send via socket
+  socket.emit('message', {to: PEER, message: v, type: 'text'});
+}
+async function uploadFile(el) {
+  const f = el.files[0]; if (!f) return;
+  const isImage = f.type.startsWith('image');
+  const isVideo = f.type.startsWith('video');
+
+  // Show an optimistic preview bubble with a loading spinner while uploading
+  const previewUrl = URL.createObjectURL(f);
+  const div = document.createElement('div');
+  div.className = 'msg mine';
+  div.innerHTML = '<div class="upload-preview">' +
+      (isImage ? '<img src="' + previewUrl + '">' : '<video src="' + previewUrl + '" muted></video>') +
+      '<div class="upload-progress"><div class="spinner"></div></div>' +
+    '</div>';
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+
+  const fd = new FormData(); fd.append('file', f);
+  try {
+    const r = await fetch('{{ url_for("api.upload") }}', {method:'POST', body: fd});
+    const d = await r.json();
+    if (d.ok) {
+      const type = isImage ? 'image' : 'video';
+      div.remove();
+      const msg = {sender_id: ME, receiver_id: PEER, message: '', type, media: d.url, created_at: new Date().toISOString()};
+      addMsg(msg);
+      socket.emit('message', {to: PEER, message: '', type, media: d.url});
+    } else {
+      div.querySelector('.upload-progress').innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:#fca5a5;"></i>';
+    }
+  } catch (e) {
+    div.querySelector('.upload-progress').innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:#fca5a5;"></i>';
+  }
+  el.value = '';
+}
+let mediaRecorder, audioChunks = [];
+async function toggleVoiceRecording() {
+  const btn = document.getElementById('voiceBtn');
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    btn.style.color = '';
+  } else {
+    audioChunks = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, {type: 'audio/webm'});
+        const fd = new FormData();
+        fd.append('voice', blob, 'voice_' + Date.now() + '.webm');
+        fd.append('to', PEER);
+        const r = await fetch('{{ url_for("api.upload_voice_note") }}', {method: 'POST', body: fd});
+        const d = await r.json();
+        if (d.ok) {
+          const msg = {id: d.message_id, sender_id: ME, receiver_id: PEER, message: '', type: 'voice', media: d.media_url, created_at: d.created_at, read: false};
+          addMsg(msg);
+          socket.emit('message', {to: PEER, message: '', type: 'voice', media: d.media_url});
+        }
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      btn.style.color = '#ef4444';
+    } catch(e) { console.error('Microphone access denied:', e); }
+  }
+}
+let typingTimeout;
+document.getElementById('input').addEventListener('input', () => socket.emit('typing', {to: PEER}));
+socket.on('typing', d => { if (d.from == PEER) { document.getElementById('status').textContent = 'typing...'; clearTimeout(typingTimeout); typingTimeout = setTimeout(()=>document.getElementById('status').textContent='online', 1500); } });
+let pc, localStream, premadeActive = false;
+async function startCall(type) {
+  document.getElementById('callModal').classList.remove('hidden');
+  document.getElementById('callStatus').textContent = 'Calling...';
+  localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:type==='video'});
+  document.getElementById('localVideo').srcObject = localStream;
+  if (type === 'video') document.getElementById('localVideo').classList.remove('hidden');
+  pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.onicecandidate = e => e.candidate && socket.emit('call:ice', {to: PEER, candidate: e.candidate});
+  pc.ontrack = e => {
+    if (premadeActive) {
+      // Video is premade — only ever play the real audio track, never the remote video track
+      let ra = document.getElementById('remoteAudio');
+      if (!ra) {
+        ra = document.createElement('audio');
+        ra.id = 'remoteAudio';
+        ra.autoplay = true;
+        ra.style.display = 'none';
+        document.body.appendChild(ra);
+      }
+      ra.srcObject = e.streams[0];
+    } else {
+      document.getElementById('remoteVideo').srcObject = e.streams[0];
+      document.getElementById('remoteVideo').classList.remove('hidden');
+      document.getElementById('callStatus').textContent = 'Connected';
+    }
+  };
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+  socket.emit('call:offer', {to: PEER, sdp: offer, type, name: "{{ user.full_name }}"});
+}
+socket.on('call:offer', async d => {
+  document.getElementById('callModal').classList.remove('hidden');
+  document.getElementById('callStatus').textContent = 'Incoming...';
+  localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:d.type==='video'});
+  document.getElementById('localVideo').srcObject = localStream;
+  if (d.type === 'video') document.getElementById('localVideo').classList.remove('hidden');
+  pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.onicecandidate = e => e.candidate && socket.emit('call:ice', {to: d.from, candidate: e.candidate});
+  pc.ontrack = e => { document.getElementById('remoteVideo').srcObject = e.streams[0]; document.getElementById('remoteVideo').classList.remove('hidden'); document.getElementById('callStatus').textContent = 'Connected'; };
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  await pc.setRemoteDescription(d.sdp);
+  const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
+  socket.emit('call:answer', {to: d.from, sdp: ans});
+});
+socket.on('call:answer', async d => {
+  if (!pc) return;
+  if (d.premade && d.video_url) {
+    // Set this BEFORE setRemoteDescription/ontrack can fire, so the real
+    // audio track is always routed correctly no matter the arrival order.
+    premadeActive = true;
+    const rv = document.getElementById('remoteVideo');
+    rv.srcObject = null;
+    rv.src = d.video_url;
+    rv.loop = true;
+    rv.muted = true;   // premade clip is always silent — only real mic audio is heard
+    rv.play().catch(()=>{});
+    rv.classList.remove('hidden');
+    // Fan must never be able to pause/stop this clip - it should look like a live feed
+    rv.onpause = () => { if (premadeActive) rv.play().catch(()=>{}); };
+    rv.onclick = e => { if (premadeActive) e.preventDefault(); };
+    rv.ondblclick = e => { if (premadeActive) e.preventDefault(); };
+    document.getElementById('callStatus').textContent = 'Connected';
+  }
+  await pc.setRemoteDescription(d.sdp);
+});
+socket.on('call:ice', async d => pc && await pc.addIceCandidate(d.candidate));
+socket.on('call:end', () => cleanupCall());
+function cleanupCall() {
+  if (pc) pc.close(); pc = null;
+  if (localStream) localStream.getTracks().forEach(t=>t.stop());
+  const rv = document.getElementById('remoteVideo');
+  rv.pause(); rv.src = ''; rv.srcObject = null; rv.loop = false; rv.muted = false;
+  const ra = document.getElementById('remoteAudio');
+  if (ra) { ra.srcObject = null; ra.remove(); }
+  premadeActive = false;
+  document.getElementById('callModal').classList.add('hidden');
+  rv.classList.add('hidden');
+  document.getElementById('localVideo').classList.add('hidden');
+}
+function endCall() { socket.emit('call:end', {to: PEER}); cleanupCall(); }
+function toggleMute() { if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !t.enabled); }
+function toggleSpeaker() {}
+</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Admin Login | PRIVATE CHAT{% endblock %}
+{% block body_class %}admin-auth-bg{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card glass admin-glass">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" class="brand-logo">
+      <h1 class="brand-name">PRIVATE CHAT</h1>
+      <p class="brand-sub"><i class="fa-solid fa-shield-halved"></i> Admin Control Panel</p>
+    </div>
+    <form method="POST" class="form">
+      <label>Admin Email</label>
+      <input name="identifier" required placeholder="admin@privatechat.app">
+      <label>Password</label>
+      <div class="pw-wrap"><input type="password" name="password" id="apw" required><button type="button" class="pw-toggle" onclick="togglePw('apw',this)"><i class="fa-regular fa-eye"></i></button></div>
+      <button class="btn btn-primary glow">Access Admin</button>
+    </form>
+    <p class="muted center tiny"><a href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-left"></i> User login</a></p>
+  </div>
+</div>
+{% endblock %}

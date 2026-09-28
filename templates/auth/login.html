@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Log In | PRIVATE CHAT{% endblock %}
+{% block body_class %}auth-bg{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card glass">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="logo" class="brand-logo">
+      <h1 class="brand-name">PRIVATE CHAT</h1>
+      <p class="brand-sub">Private messaging with verified public figures</p>
+    </div>
+    <form method="POST" class="form">
+      <label>Email or Phone</label>
+      <input type="text" name="identifier" required placeholder="you@example.com">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" name="password" id="pw" required placeholder="••••••••">
+        <button type="button" class="pw-toggle" onclick="togglePw('pw', this)"><i class="fa-regular fa-eye"></i></button>
+      </div>
+      <button type="submit" class="btn btn-primary glow">Log In</button>
+    </form>
+    <p class="muted center">Don't have an account? <a href="{{ url_for('auth.register') }}">Create one</a></p>
+  </div>
+</div>
+{% endblock %}

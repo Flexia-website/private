@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}My Profile | Public Figure{% endblock %}
+{% block body_class %}app-bg public-bg{% endblock %}
+{% block content %}
+{% from "base.html" import verified_badge with context %}
+<div class="app-shell">
+  <header class="app-header"><a href="{{ url_for('public.dashboard') }}" class="back"><i class="fa-solid fa-arrow-left"></i></a><span>My Profile</span></header>
+  <main class="app-main">
+    <div class="glass card-center">
+      <div class="pf-avatar-lg">
+        {% if pf.profile_photo %}<img src="{{ pf.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ pf.full_name[0] }}</div>{% endif %}
+      </div>
+      <h2><span class="name-with-badge">{{ pf.full_name }}{% if pf.verified %}{{ verified_badge('lg') }}{% endif %}</span></h2>
+      <p class="muted">@{{ pf.username or pf.email.split('@')[0] }}</p>
+      <div class="stats-row">
+        <div class="stat"><strong>{{ pf.followers_count | humanize }}</strong><span>Followers</span></div>
+        <div class="stat"><strong>{{ pf.likes_count | humanize }}</strong><span>Likes</span></div>
+      </div>
+    </div>
+    <form method="POST" enctype="multipart/form-data" class="glass form">
+      <label>Full Name</label><input name="full_name" value="{{ pf.full_name }}">
+      <label>Username</label><input name="username" value="{{ pf.username }}">
+      <label>Bio</label><textarea name="bio">{{ pf.bio }}</textarea>
+      <label>Profile Photo</label>
+      <label class="photo-upload-field" id="photoField">
+        <div class="thumb" id="photoThumb">
+          {% if pf.profile_photo %}<img src="{{ pf.profile_photo }}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">{% else %}<i class="fa-solid fa-camera"></i>{% endif %}
+        </div>
+        <div class="label-text"><strong>Upload a photo</strong><span>PNG or JPG, up to 5MB</span></div>
+        <input type="file" name="photo" accept="image/*" onchange="previewPhoto(this)">
+      </label>
+      <button class="btn btn-primary glow">Save</button>
+    </form>
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item" href="{{ url_for('public.dashboard') }}"><i class="fa-solid fa-chart-simple"></i><span>Dashboard</span></a>
+    <a class="nav-item" href="{{ url_for('public.call_video') }}"><i class="fa-solid fa-video"></i><span>Call Video</span></a>
+    <a class="nav-item active" href="{{ url_for('public.profile') }}"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+    <a class="nav-item" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></a>
+  </nav>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function previewPhoto(el) {
+  const f = el.files[0]; if (!f) return;
+  const thumb = document.getElementById('photoThumb');
+  thumb.innerHTML = '<img src="' + URL.createObjectURL(f) + '" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">';
+}
+</script>
+{% endblock %}

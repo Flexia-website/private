@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ pf.full_name }} | PRIVATE CHAT{% endblock %}
+{% block body_class %}app-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header"><a href="{{ url_for('user.home') }}" class="back"><i class="fa-solid fa-arrow-left"></i></a><span>Public Figure</span></header>
+  <main class="app-main">
+    <div class="glass card-center">
+      <div class="pf-avatar-lg">
+        {% if pf.profile_photo %}<img src="{{ pf.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ pf.full_name[0] }}</div>{% endif %}
+      </div>
+      {% from "base.html" import verified_badge with context %}
+      <h2><span class="name-with-badge">{{ pf.full_name }}{% if pf.verified %}{{ verified_badge('lg') }}{% endif %}</span></h2>
+      <p class="muted">@{{ pf.username or 'publicfigure' }}</p>
+      <p class="bio">{{ pf.bio or 'Verified Public Figure' }}</p>
+      <div class="stats-row">
+        <div class="stat"><strong>{{ pf.followers_count | humanize }}</strong><span>Followers</span></div>
+        <div class="stat"><strong>{{ pf.likes_count | humanize }}</strong><span>Likes</span></div>
+      </div>
+      <div class="row-btns">
+        <a class="btn btn-primary glow" href="{{ url_for('user.chat_with_pf') }}"><i class="fa-solid fa-comment"></i> Chat</a>
+        <a class="btn btn-ghost" href="{{ url_for('user.fan_card') }}"><i class="fa-solid fa-id-card"></i> Fan Cards</a>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

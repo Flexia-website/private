@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Fan Card Requests{% endblock %}
+{% block content %}
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>User</th><th>Public Figure</th><th>Name On Card</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for c in cards %}
+      {% set u = users.get(c.user_id) %}
+      {% set pf = users.get(c.public_figure_id) %}
+      <tr>
+        <td>{{ u.full_name if u else c.user_id }}</td>
+        <td>{{ pf.full_name if pf else c.public_figure_id }}</td>
+        <td>{{ c.name }}</td>
+        <td><span class="pill {{ c.status }}">{{ c.status }}</span></td>
+        <td class="actions">
+          <form method="POST" action="{{ url_for('admin.fan_card_action', cid=c.id, action='approve') }}" style="display:inline"><button class="btn btn-ghost xs">Approve</button></form>
+          <form method="POST" action="{{ url_for('admin.fan_card_action', cid=c.id, action='reject') }}" style="display:inline"><button class="btn btn-ghost xs">Reject</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

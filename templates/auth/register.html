@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Register | PRIVATE CHAT{% endblock %}
+{% block body_class %}auth-bg{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card glass">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="logo" class="brand-logo">
+      <h1 class="brand-name">PRIVATE CHAT</h1>
+      <p class="brand-sub">Create your account</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div style="padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 12px; {% if category == 'error' %}background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);{% else %}background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.3);{% endif %}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form id="registerForm" method="POST" class="form">
+      <label>Full Name</label>
+      <input type="text" name="full_name" required placeholder="John Doe">
+
+      <label>Email</label>
+      <input type="email" name="email" required placeholder="you@example.com">
+
+      <label>Phone Number</label>
+      <input type="tel" name="phone" required placeholder="+1 234 567 8900">
+
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" name="password" id="pw1" required placeholder="••••••••">
+        <button type="button" class="pw-toggle" onclick="togglePw('pw1', this)"><i class="fa-regular fa-eye"></i></button>
+      </div>
+
+      <label>Confirm Password</label>
+      <div class="pw-wrap">
+        <input type="password" name="confirm_password" id="pw2" required placeholder="••••••••">
+        <button type="button" class="pw-toggle" onclick="togglePw('pw2', this)"><i class="fa-regular fa-eye"></i></button>
+      </div>
+
+      <button type="submit" class="btn btn-primary glow">Create Account</button>
+    </form>
+
+    <p class="muted center" style="margin-top: 15px;">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a></p>
+  </div>
+</div>
+
+<!-- Verification Code Modal -->
+<div id="verificationModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="auth-card glass" style="max-width: 400px; width: 90%; text-align: center;">
+    <div style="margin-bottom: 20px;">
+      <h2 style="font-size: 18px; margin-bottom: 8px;">✓ Account Created!</h2>
+      <p class="muted" style="font-size: 12px;">Verify your phone number</p>
+    </div>
+
+    <div id="codeDisplay" style="background: rgba(43,127,255,0.1); border: 1px solid rgba(43,127,255,0.3); border-radius: 10px; padding: 20px; margin: 20px 0; font-size: 42px; font-weight: 600; color: #60a5fa; letter-spacing: 8px; font-family: 'Courier New', monospace;">------</div>
+
+    <p class="muted" style="font-size: 12px; margin-bottom: 15px;">Enter this code to verify:</p>
+
+    <input
+      type="text"
+      id="codeInput"
+      placeholder="000000"
+      maxlength="6"
+      inputmode="numeric"
+      style="padding: 11px 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: var(--txt); outline: none; width: 100%; text-align: center; font-size: 24px; letter-spacing: 6px; margin-bottom: 20px; font-family: 'Courier New', monospace; font-weight: 500;"
+    >
+
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+      <button class="btn btn-primary glow" style="flex: 1;" onclick="submitVerificationCode()">Verify</button>
+      <button class="btn" style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);" onclick="skipVerification()">Skip</button>
+    </div>
+
+    <p class="muted" style="font-size: 11px;">📱 Code displayed here in the app. No SMS or email sent.</p>
+  </div>
+</div>
+
+<script>
+  const registerForm = document.getElementById('registerForm');
+  const verificationModal = document.getElementById('verificationModal');
+  const codeDisplay = document.getElementById('codeDisplay');
+  const codeInput = document.getElementById('codeInput');
+
+  registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(registerForm);
+    const response = await fetch('/register', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (response.ok) {
+      setTimeout(async () => {
+        const codeResponse = await fetch('/api/verification-code');
+        const codeData = await codeResponse.json();
+
+        if (codeData.code) {
+          codeDisplay.textContent = codeData.code;
+          codeInput.value = '';
+          codeInput.focus();
+          verificationModal.style.display = 'flex';
+        }
+      }, 100);
+    }
+  });
+
+  async function submitVerificationCode() {
+    const code = codeInput.value.trim();
+
+    if (code.length < 6) {
+      alert('Please enter the 6-digit code');
+      return;
+    }
+
+    const response = await fetch('/api/verify-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert('✓ Phone verified!');
+      window.location.href = '/user/home';
+    } else {
+      alert('❌ Invalid code. Try again.');
+      codeInput.value = '';
+      codeInput.focus();
+    }
+  }
+
+  function skipVerification() {
+    if (confirm('Skip phone verification? You can verify later.')) {
+      window.location.href = '/user/home';
+    }
+  }
+
+  codeInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') submitVerificationCode();
+  });
+
+  codeInput.addEventListener('input', () => {
+    if (codeInput.value.length === 6) {
+      setTimeout(submitVerificationCode, 300);
+    }
+  });
+
+  function togglePw(id, btn) {
+    const input = document.getElementById(id);
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+    } else {
+      input.type = 'password';
+      btn.innerHTML = '<i class="fa-regular fa-eye"></i>';
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Call Video | Public Figure{% endblock %}
+{% block body_class %}app-bg public-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header"><a href="{{ url_for('public.dashboard') }}" class="back"><i class="fa-solid fa-arrow-left"></i></a><span>Call Video</span></header>
+  <main class="app-main">
+    <div class="glass card-center" style="text-align:left;">
+      <h3 style="margin-bottom:4px;"><i class="fa-solid fa-video" style="color:#2b7fff;margin-right:8px;"></i>Video Call Response</h3>
+      <p class="muted tiny" style="margin-bottom:16px;">
+        Set a video that plays automatically when you accept a video call. It loops seamlessly for the fan on the other end,
+        so you don't need to be on camera live. Fans will see this as your live video call.
+      </p>
+
+      <div id="videoPreviewWrap">
+        {% if pf.call_video_url %}
+          <div class="upload-preview" style="display:block;width:100%;max-width:none;">
+            <video src="{{ pf.call_video_url }}" controls loop muted style="width:100%;max-height:320px;border-radius:14px;"></video>
+          </div>
+          <p class="tiny muted" style="margin-top:8px;"><i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Active — this plays for fans when you accept a video call.</p>
+        {% else %}
+          <div class="photo-upload-field" style="padding:26px;">
+            <div class="thumb" style="width:48px;height:48px;"><i class="fa-solid fa-film"></i></div>
+            <div class="label-text"><strong>No call video set</strong><span>Fans will see a standard call screen until you add one</span></div>
+          </div>
+        {% endif %}
+      </div>
+
+      <label class="photo-upload-field" id="videoField" style="margin-top:14px;">
+        <div class="thumb"><i class="fa-solid fa-upload"></i></div>
+        <div class="label-text"><strong>{{ 'Replace video' if pf.call_video_url else 'Upload a video' }}</strong><span>MP4, WebM or MOV — plays on loop</span></div>
+        <input type="file" id="videoInput" accept="video/*" onchange="uploadCallVideo(this)">
+      </label>
+
+      {% if pf.call_video_url %}
+        <button class="btn btn-ghost" id="removeBtn" onclick="removeCallVideo()" style="margin-top:12px;width:100%;">
+          <i class="fa-solid fa-trash"></i> Remove video
+        </button>
+      {% endif %}
+
+      <div id="statusMsg" class="tiny" style="margin-top:10px;"></div>
+    </div>
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item" href="{{ url_for('public.dashboard') }}"><i class="fa-solid fa-chart-simple"></i><span>Dashboard</span></a>
+    <a class="nav-item active" href="{{ url_for('public.call_video') }}"><i class="fa-solid fa-video"></i><span>Call Video</span></a>
+    <a class="nav-item" href="{{ url_for('public.profile') }}"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+    <a class="nav-item" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></a>
+  </nav>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function uploadCallVideo(el) {
+  const f = el.files[0]; if (!f) return;
+  const status = document.getElementById('statusMsg');
+  status.textContent = 'Uploading...'; status.style.color = '#9ca3af';
+  const fd = new FormData(); fd.append('video', f);
+  try {
+    const r = await fetch('{{ url_for("public.call_video") }}', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = 'Saved! Reloading...'; status.style.color = '#86efac';
+      setTimeout(() => window.location.reload(), 600);
+    } else {
+      status.textContent = d.error || 'Upload failed.'; status.style.color = '#fca5a5';
+    }
+  } catch (e) {
+    status.textContent = 'Upload failed.'; status.style.color = '#fca5a5';
+  }
+}
+async function removeCallVideo() {
+  if (!confirm('Remove your call video? Fans will see a standard call screen until you add a new one.')) return;
+  const r = await fetch('{{ url_for("public.call_video_remove") }}', {method: 'POST'});
+  const d = await r.json();
+  if (d.ok) window.location.reload();
+}
+</script>
+{% endblock %}

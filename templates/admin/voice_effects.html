@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Voice Effects{% endblock %}
+{% block content %}
+<div class="glass form">
+  <h3>Add Voice Effect</h3>
+  <form method="POST">
+    <label>Name</label><input name="name" required>
+    <button class="btn btn-primary glow">Add</button>
+  </form>
+</div>
+<h3 class="section-title">All Effects</h3>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Name</th><th>Active</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for e in effects %}
+      <tr>
+        <td>{{ e.name }}</td>
+        <td>{{ 'Yes' if e.active else 'No' }}</td>
+        <td class="actions">
+          <form method="POST" action="{{ url_for('admin.toggle_voice', eid=e.id) }}" style="display:inline"><button class="btn btn-ghost xs">Toggle</button></form>
+          <form method="POST" action="{{ url_for('admin.delete_voice', eid=e.id) }}" style="display:inline" onsubmit="return confirm('Delete?')"><button class="btn btn-ghost xs">Delete</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

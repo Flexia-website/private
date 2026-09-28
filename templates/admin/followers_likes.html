@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Followers & Likes{% endblock %}
+{% block content %}
+<div class="glass form">
+  <h3>Edit Followers &amp; Likes</h3>
+  <form method="POST">
+    <label>Select Public Figure</label>
+    <select name="pf_id" required>
+      <option value="">-- choose --</option>
+      {% for pf in pfs %}<option value="{{ pf.id }}">{{ pf.full_name }}</option>{% endfor %}
+    </select>
+    <label>Followers</label><input name="followers" placeholder="e.g. 2400000">
+    <label>Likes</label><input name="likes" placeholder="e.g. 45600000">
+    <button class="btn btn-primary glow">SAVE CHANGES</button>
+  </form>
+</div>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Name</th><th>Followers</th><th>Likes</th></tr></thead>
+    <tbody>
+      {% for pf in pfs %}
+      <tr><td>{{ pf.full_name }}</td><td>{{ pf.followers_count | humanize }}</td><td>{{ pf.likes_count | humanize }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

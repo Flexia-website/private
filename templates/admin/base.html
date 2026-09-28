@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Admin | PRIVATE CHAT{% endblock %}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}">
+{% block head %}{% endblock %}
+</head>
+<body class="admin-bg">
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="toasts">
+      {% for cat, msg in messages %}<div class="toast toast-{{cat}}">{{ msg }}</div>{% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="">
+      <div><strong>PRIVATE CHAT</strong><span>Admin Panel</span></div>
+    </div>
+    <nav class="admin-nav">
+      <a href="{{ url_for('admin.dashboard') }}" class="{{ 'active' if request.endpoint == 'admin.dashboard' else '' }}"><i class="fa-solid fa-chart-simple"></i> Dashboard</a>
+      <a href="{{ url_for('admin.users_list') }}" class="{{ 'active' if request.endpoint == 'admin.users_list' else '' }}"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="{{ url_for('admin.public_figures_list') }}" class="{{ 'active' if request.endpoint == 'admin.public_figures_list' else '' }}"><i class="fa-solid fa-star"></i> Public Figures</a>
+      <a href="{{ url_for('admin.assign_page') }}" class="{{ 'active' if request.endpoint == 'admin.assign_page' else '' }}"><i class="fa-solid fa-link"></i> Assign Users</a>
+      <a href="{{ url_for('admin.fan_cards') }}" class="{{ 'active' if request.endpoint == 'admin.fan_cards' else '' }}"><i class="fa-solid fa-id-card"></i> Fan Card Designs</a>
+      <a href="{{ url_for('admin.fan_card_requests') }}" class="{{ 'active' if request.endpoint == 'admin.fan_card_requests' else '' }}"><i class="fa-solid fa-inbox"></i> Fan Card Requests</a>
+      <a href="{{ url_for('admin.voice_effects') }}" class="{{ 'active' if request.endpoint == 'admin.voice_effects' else '' }}"><i class="fa-solid fa-microphone-lines"></i> Voice Effects</a>
+      <a href="{{ url_for('admin.video_library') }}" class="{{ 'active' if request.endpoint == 'admin.video_library' else '' }}"><i class="fa-solid fa-film"></i> Video Library</a>
+      <a href="{{ url_for('admin.followers_likes') }}" class="{{ 'active' if request.endpoint == 'admin.followers_likes' else '' }}"><i class="fa-solid fa-chart-line"></i> Followers &amp; Likes</a>
+      <a href="{{ url_for('admin.messages') }}" class="{{ 'active' if request.endpoint == 'admin.messages' else '' }}"><i class="fa-solid fa-comment"></i> Messages</a>
+      <a href="{{ url_for('admin.settings') }}" class="{{ 'active' if request.endpoint == 'admin.settings' else '' }}"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="admin-sidebar-footer">
+      <span class="muted tiny">Signed in as</span>
+      <strong>{{ current_user.email if current_user else '' }}</strong>
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost sm">Log out</a>
+    </div>
+  </aside>
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <button class="admin-hamburger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
+      <h1>{% block page_title %}Admin{% endblock %}</h1>
+      <span class="muted tiny">{{ now.strftime('%A, %b %d %Y') }}</span>
+    </header>
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

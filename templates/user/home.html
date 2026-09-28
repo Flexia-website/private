@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Home | PRIVATE CHAT{% endblock %}
+{% block body_class %}app-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="">
+      <span>PRIVATE CHAT</span>
+    </div>
+    <div class="user-chip">
+      {% if user.profile_photo %}<img src="{{ user.profile_photo }}" class="avatar">{% else %}<div class="avatar avatar-fallback">{{ user.full_name[0]|upper }}</div>{% endif %}
+      <span>{{ user.full_name.split()[0] }}</span>
+    </div>
+  </header>
+  <main class="app-main">
+    {% if public_figure %}
+      <div class="glass card-center connect-card">
+        <div class="pf-avatar-lg">
+          {% if public_figure.profile_photo %}<img src="{{ public_figure.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ public_figure.full_name[0]|upper }}</div>{% endif %}
+        </div>
+        {% from "base.html" import verified_badge with context %}
+        <h2><span class="name-with-badge">Connected to {{ public_figure.full_name }}{% if public_figure.verified %}{{ verified_badge('lg') }}{% endif %}</span></h2>
+        <p class="muted">You are permanently connected to this public figure.</p>
+        <div class="row-btns">
+          <a class="btn btn-primary glow" href="{{ url_for('user.chat_with_pf') }}"><i class="fa-solid fa-comment"></i> Open Chat</a>
+          <a class="btn btn-ghost" href="{{ url_for('user.view_pf', pf_id=public_figure.id) }}"><i class="fa-solid fa-user"></i> Profile</a>
+        </div>
+      </div>
+    {% else %}
+      <div class="glass card-center connect-card">
+        <a href="{{ url_for('user.connect') }}" class="glow-circle"><i class="fa-solid fa-plus"></i></a>
+        <h2 class="verify-title">VERIFY MY NUMBER</h2>
+        <p class="muted">Enter the registered number of your Public Figure to connect.</p>
+      </div>
+    {% endif %}
+    {% if notifications %}
+      <h3 class="section-title">Notifications</h3>
+      <div class="notif-list">
+        {% for n in notifications %}
+          <div class="notif glass">
+            <strong>{{ n.title }}</strong>
+            <p>{{ n.message }}</p>
+            <span class="muted tiny">{{ n.created_at.strftime('%b %d, %H:%M') }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item active" href="{{ url_for('user.home') }}"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a class="nav-item" href="{{ url_for('user.chat_with_pf') if user.assigned_public_figure_id else url_for('user.home') }}"><i class="fa-solid fa-comment"></i><span>Chats</span></a>
+    <a class="nav-item" href="{{ url_for('user.calls') }}"><i class="fa-solid fa-phone"></i><span>Calls</span></a>
+    <a class="nav-item" href="{{ url_for('user.profile') }}"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+  </nav>
+</div>
+{% endblock %}

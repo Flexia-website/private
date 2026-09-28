@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Fan Card | PRIVATE CHAT{% endblock %}
+{% block body_class %}app-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header"><a href="{{ url_for('user.profile') }}" class="back"><i class="fa-solid fa-arrow-left"></i></a><span>Create Fan Card</span></header>
+  <main class="app-main">
+    <form method="POST" enctype="multipart/form-data" class="glass form">
+      <h3>Design your Fan Card</h3>
+      <p class="muted tiny">Your fan card is reviewed by admin before appearing on {{ public_figure.full_name }}'s profile.</p>
+      <label>Your Name</label>
+      <input name="name" value="{{ user.full_name }}" required>
+      <label>Your Photo</label>
+      <input type="file" name="photo" accept="image/*">
+      <label>Choose Design</label>
+      <div class="design-grid">
+        {% for d in designs %}
+          <label class="design-opt">
+            <input type="radio" name="design_id" value="{{ d.id }}" {% if loop.first %}checked{% endif %}>
+            <div class="design-preview">{{ d.name }}</div>
+          </label>
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary glow">CREATE FAN CARD</button>
+    </form>
+  </main>
+</div>
+{% endblock %}

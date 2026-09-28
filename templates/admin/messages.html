@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Messages{% endblock %}
+{% block content %}
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>From</th><th>To</th><th>Message</th><th>Time</th></tr></thead>
+    <tbody>
+      {% for m in messages %}
+      {% set s = users.get(m.sender_id) %}
+      {% set r = users.get(m.receiver_id) %}
+      <tr>
+        <td>{{ s.full_name if s else m.sender_id }}</td>
+        <td>{{ r.full_name if r else m.receiver_id }}</td>
+        <td>{{ m.message[:60] }}</td>
+        <td>{{ m.created_at.strftime('%b %d %H:%M') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

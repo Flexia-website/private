@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Assign Users{% endblock %}
+{% block content %}
+<div class="glass form">
+  <h3>ASSIGN USER TO PUBLIC FIGURE</h3>
+  <form method="POST" action="" id="assignForm">
+    <label>Select User</label>
+    <select id="userSel" onchange="updateForm()" required>
+      <option value="">-- choose user --</option>
+      {% for u in users %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
+    </select>
+    <label>Select Public Figure</label>
+    <select name="public_figure_id" required>
+      <option value="">-- choose --</option>
+      {% for pf in pfs %}<option value="{{ pf.id }}">{{ pf.full_name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-primary glow">ASSIGN</button>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function updateForm() {
+  const id = document.getElementById('userSel').value;
+  document.getElementById('assignForm').action = id ? '/admin/users/' + id + '/assign' : '';
+}
+</script>
+{% endblock %}

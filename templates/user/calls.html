@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Calls | PRIVATE CHAT{% endblock %}
+{% block body_class %}app-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header"><span>Calls</span></header>
+  <main class="app-main">
+    {% if public_figure %}
+      {% from "base.html" import verified_badge with context %}
+      <div class="glass card-center">
+        <div class="pf-avatar-lg">
+          {% if public_figure.profile_photo %}<img src="{{ public_figure.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ public_figure.full_name[0] }}</div>{% endif %}
+        </div>
+        <h3><span class="name-with-badge">{{ public_figure.full_name }}{% if public_figure.verified %}{{ verified_badge() }}{% endif %}</span></h3>
+        <a class="btn btn-primary glow" href="{{ url_for('user.chat_with_pf') }}">Open Chat to Call</a>
+      </div>
+    {% else %}
+      <p class="muted center">Connect to a public figure to make calls.</p>
+    {% endif %}
+    <h3 class="section-title">Recent</h3>
+    {% for c in calls %}
+      <div class="notif glass">
+        <strong>{{ 'Outgoing' if c.caller_id == user.id else 'Incoming' }} {{ c.call_type }}</strong>
+        <span class="muted tiny">{{ c.created_at.strftime('%b %d, %H:%M') }}</span>
+      </div>
+    {% else %}
+      <p class="muted center">No calls yet.</p>
+    {% endfor %}
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item" href="{{ url_for('user.home') }}"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a class="nav-item" href="{{ url_for('user.chat_with_pf') if user.assigned_public_figure_id else url_for('user.home') }}"><i class="fa-solid fa-comment"></i><span>Chats</span></a>
+    <a class="nav-item active" href="{{ url_for('user.calls') }}"><i class="fa-solid fa-phone"></i><span>Calls</span></a>
+    <a class="nav-item" href="{{ url_for('user.profile') }}"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+  </nav>
+</div>
+{% endblock %}

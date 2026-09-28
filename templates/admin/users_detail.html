@@ -1,0 +1,77 @@
+{% extends "admin/base.html" %}
+{% block page_title %}User Details{% endblock %}
+{% block content %}
+<div class="admin-hint">
+  <strong>User Information</strong>
+  <span class="muted tiny">View detailed profile and device information</span>
+</div>
+
+<div class="glass" style="padding:16px;margin-bottom:16px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <label class="tiny muted">Name</label>
+      <strong id="user-name">Loading...</strong>
+    </div>
+    <div>
+      <label class="tiny muted">Phone</label>
+      <strong id="user-phone">-</strong>
+      <span class="tiny" id="phone-verified" style="margin-left:8px;"></span>
+    </div>
+    <div>
+      <label class="tiny muted">Country</label>
+      <strong id="user-country">-</strong>
+      <span class="tiny muted" id="country-code" style="display:block;margin-top:4px;"></span>
+    </div>
+    <div>
+      <label class="tiny muted">IP Address</label>
+      <strong id="user-ip">-</strong>
+    </div>
+    <div>
+      <label class="tiny muted">Last Login</label>
+      <strong id="user-login">-</strong>
+    </div>
+    <div>
+      <label class="tiny muted">Joined</label>
+      <strong id="user-created">-</strong>
+    </div>
+  </div>
+  
+  <hr style="margin:16px 0;border:none;border-top:1px solid rgba(160,120,255,0.2);">
+  
+  <label class="tiny muted">Device Information</label>
+  <div id="device-info" style="font-size:11px;color:#c4b5fd;white-space:pre-wrap;word-break:break-all;font-family:monospace;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;margin-top:8px;">Loading...</div>
+</div>
+
+<script>
+async function loadUserDetails() {
+  const params = new URLSearchParams(window.location.search);
+  const uid = params.get('uid');
+  if (!uid) return;
+  
+  try {
+    const res = await fetch(`/api/user/${uid}/details`);
+    const data = await res.json();
+    
+    document.getElementById('user-name').textContent = data.name;
+    document.getElementById('user-phone').textContent = data.phone || '-';
+    document.getElementById('phone-verified').innerHTML = data.phone_verified ? 
+      '<span style="color:#10b981;">✓ Verified</span>' : 
+      '<span style="color:#ef4444;">✗ Not verified</span>';
+    document.getElementById('user-country').textContent = data.country_name || '-';
+    document.getElementById('country-code').textContent = data.country_code || '';
+    document.getElementById('user-ip').textContent = data.ip_address || '-';
+    document.getElementById('user-login').textContent = data.last_login ? new Date(data.last_login).toLocaleString() : 'Never';
+    document.getElementById('user-created').textContent = new Date(data.created_at).toLocaleString();
+    
+    const devInfo = data.device_info;
+    const devDisplay = Object.entries(devInfo).map(([k,v]) => `${k}: ${v}`).join('\n') || 'No device info';
+    document.getElementById('device-info').textContent = devDisplay;
+  } catch(e) {
+    console.error('Error loading user details:', e);
+    alert('Failed to load user details');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadUserDetails);
+</script>
+{% endblock %}

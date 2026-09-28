@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Settings{% endblock %}
+{% block content %}
+<div class="glass form">
+  <h3>App Settings</h3>
+  <p class="muted tiny">Admin account is managed through environment variables (ADMIN_EMAIL, ADMIN_PASSWORD) and synced on startup.</p>
+  <form method="POST">
+    <label>App Name</label><input value="PRIVATE CHAT">
+    <label>Support Email</label><input placeholder="support@privatechat.app">
+    <button class="btn btn-primary glow">Save</button>
+  </form>
+</div>
+{% endblock %}

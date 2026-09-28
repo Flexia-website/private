@@ -1,0 +1,17 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="admin-cards">
+  <div class="admin-card glass"><span class="ac-label">TOTAL USERS</span><strong>{{ total_users }}</strong></div>
+  <div class="admin-card glass"><span class="ac-label">PUBLIC FIGURES</span><strong>{{ public_figures }}</strong></div>
+  <div class="admin-card glass"><span class="ac-label">CONNECTED USERS</span><strong>{{ connected }}</strong></div>
+  <div class="admin-card glass"><span class="ac-label">ACTIVE CHATS</span><strong>{{ active_chats }}</strong></div>
+  <div class="admin-card glass"><span class="ac-label">ACTIVE CALLS</span><strong>{{ active_calls }}</strong></div>
+  <div class="admin-card glass"><span class="ac-label">FAN CARDS</span><strong>{{ fan_cards }}</strong></div>
+  <div class="admin-card glass alert"><span class="ac-label">PENDING CARDS</span><strong>{{ pending_cards }}</strong></div>
+</div>
+<div class="admin-hint glass">
+  <strong>Getting started</strong>
+  <p class="muted tiny">Upgrade a user to Public Figure, then assign normal users to them. Admin is created from environment variables on startup.</p>
+</div>
+{% endblock %}

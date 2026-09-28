@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lip Sync Session</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        .session-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: 100vh;
+        }
+        .panel {
+            background: #111;
+            border-radius: 12px;
+            border: 1px solid #333;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-header {
+            padding: 15px;
+            border-bottom: 1px solid #333;
+            background: #1a1a1a;
+        }
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #999;
+        }
+        .panel-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: #0a0a0a;
+        }
+        video, canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .camera-feed { position: relative; }
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+        .status-indicator.inactive { background: #ef4444; }
+        .face-detected {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            border-top: 1px solid #333;
+            justify-content: center;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-2px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            background: #333;
+            color: white;
+        }
+        .btn-secondary:hover { background: #444; }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover { background: #dc2626; }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 10px;
+            border-top: 1px solid #333;
+            font-size: 12px;
+        }
+        .stat-item {
+            padding: 6px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stat-label { color: #999; }
+        .stat-value { color: #667eea; font-weight: 600; }
+        @media (max-width: 1024px) {
+            .session-container {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+        }
+        .info-box {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            color: #a5b4fc;
+        }
+    </style>
+</head>
+<body>
+    <div class="session-container">
+        <!-- Video Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Original Video</div>
+            </div>
+            <div class="panel-content">
+                <div class="camera-feed">
+                    <video id="videoPlayer" controls></video>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="btn-secondary" onclick="videoPlayer.play()">Play</button>
+                <button class="btn-secondary" onclick="videoPlayer.pause()">Pause</button>
+                <input type="range" id="videoProgress" style="flex: 1; height: 4px;" />
+            </div>
+        </div>
+
+        <!-- Camera Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Your Camera</div>
+            </div>
+            <div class="panel-content">
+                <div class="camera-feed">
+                    <canvas id="canvas"></canvas>
+                    <div class="status-indicator" id="statusInd"></div>
+                    <div class="face-detected" id="faceStatus">🔍 Detecting face...</div>
+                </div>
+            </div>
+            <div class="info-box" style="margin: 10px;">
+                Make mouth movements matching the video. Camera captures your expressions in real-time.
+            </div>
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">FPS</span>
+                    <span class="stat-value" id="fps">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Face</span>
+                    <span class="stat-value" id="faceDetected">No</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Mouth</span>
+                    <span class="stat-value" id="mouthOpen">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Duration</span>
+                    <span class="stat-value" id="duration">00:00</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="btn-primary" id="startBtn" onclick="startSession()">Start</button>
+                <button class="btn-danger" id="stopBtn" onclick="stopSession()" disabled>Stop</button>
+                <button class="btn-secondary" onclick="downloadResult()" disabled id="downloadBtn">Download</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const videoPlayer = document.getElementById('videoPlayer');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const faceStatus = document.getElementById('faceStatus');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const statusInd = document.getElementById('statusInd');
+        const fpsDisplay = document.getElementById('fps');
+        const durationDisplay = document.getElementById('duration');
+        const videoProgress = document.getElementById('videoProgress');
+
+        let stream = null;
+        let recording = false;
+        let startTime = null;
+        let frameCount = 0;
+        let lastFrameTime = Date.now();
+        let currentFps = 0;
+        let processingFrame = false;
+
+        const videoId = {{ session.video_id }};
+        const socket = io();
+        
+        // OPTIMIZED: Reduce quality for speed
+        const JPEG_QUALITY = 0.6;  // Lower quality = faster encoding
+        const FRAME_SKIP = 2;       // Process every 2nd frame
+        const CANVAS_WIDTH = 640;   // Lower resolution = faster
+        const CANVAS_HEIGHT = 480;
+
+        videoPlayer.src = '{{ video.video_url }}';
+        videoPlayer.addEventListener('loadedmetadata', () => {
+            videoProgress.max = videoPlayer.duration;
+        });
+        videoPlayer.addEventListener('timeupdate', () => {
+            videoProgress.value = videoPlayer.currentTime;
+        });
+        videoProgress.addEventListener('change', (e) => {
+            videoPlayer.currentTime = e.target.value;
+        });
+
+        async function startSession() {
+            try {
+                // OPTIMIZED: Lower resolution for speed
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false 
+                });
+                
+                recording = true;
+                startTime = Date.now();
+                statusInd.classList.remove('inactive');
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                faceStatus.textContent = '📹 Mouth Sync Active';
+                
+                socket.emit('lip_sync:start', { video_id: videoId });
+                processFramesOptimized();
+            } catch (err) {
+                alert('Camera access denied: ' + err.message);
+            }
+        }
+
+        async function processFramesOptimized() {
+            if (!recording || !stream) return;
+
+            const video = new (window.HTMLVideoElement || HTMLVideoElement)();
+            video.srcObject = stream;
+            video.onloadedmetadata = () => video.play();
+
+            let frameIndex = 0;
+            const processFrame = () => {
+                if (!recording) {
+                    video.pause();
+                    return;
+                }
+
+                // Only process every Nth frame to reduce lag
+                if (frameIndex++ % FRAME_SKIP !== 0) {
+                    requestAnimationFrame(processFrame);
+                    return;
+                }
+
+                // Skip if already processing (don't queue up frames)
+                if (processingFrame) {
+                    requestAnimationFrame(processFrame);
+                    return;
+                }
+
+                try {
+                    canvas.width = CANVAS_WIDTH;
+                    canvas.height = CANVAS_HEIGHT;
+                    ctx.drawImage(video, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                    // OPTIMIZED: Ultra low quality for speed
+                    const imageData = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+                    
+                    processingFrame = true;
+                    socket.emit('lip_sync:frame', {
+                        video_id: videoId,
+                        frame: imageData
+                    }, () => {
+                        processingFrame = false;
+                    });
+
+                    // Update FPS counter
+                    const now = Date.now();
+                    frameCount++;
+                    if (now - lastFrameTime >= 1000) {
+                        fpsDisplay.textContent = Math.round(frameCount / FRAME_SKIP);
+                        frameCount = 0;
+                        lastFrameTime = now;
+                    }
+
+                    // Update duration
+                    const elapsed = Math.floor((now - startTime) / 1000);
+                    const mins = Math.floor(elapsed / 60);
+                    const secs = elapsed % 60;
+                    durationDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                } catch (e) {
+                    console.error('Frame processing error:', e);
+                }
+
+                requestAnimationFrame(processFrame);
+            };
+
+            processFrame();
+        }
+
+        function stopSession() {
+            recording = false;
+            processingFrame = false;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            statusInd.classList.add('inactive');
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            downloadBtn.disabled = false;
+            faceStatus.textContent = '✅ Sync Complete';
+
+            socket.emit('lip_sync:stop', { video_id: videoId });
+        }
+
+        function downloadResult() {
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = `mouth-sync-${Date.now()}.png`;
+            link.click();
+        }
+
+        // Minimal socket handlers
+        socket.on('lip_sync:frame_processed', () => {
+            faceStatus.textContent = '🎤 Mouth Sync...';
+        });
+
+        socket.on('lip_sync:error', (data) => {
+            faceStatus.textContent = '❌ Error';
+        });
+
+        socket.on('lip_sync:stopped', () => {
+            faceStatus.textContent = '✅ Session Saved';
+        });
+    </script>
+</body>
+</html>

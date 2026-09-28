@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Verify Phone Number{% endblock %}
+{% block body_class %}app-bg auth-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header"><span>Verify Phone</span></header>
+  <main class="app-main">
+    <div class="glass card-center">
+      <div class="glow-circle"><i class="fa-solid fa-phone"></i></div>
+      <h2>Verify Your Phone</h2>
+      <p class="muted" style="font-size:14px;letter-spacing:0.5px;font-weight:500;">{{ phone }}</p>
+      <p class="muted tiny">Country: <strong style="color:#c4b5fd;">{{ country }}</strong></p>
+      
+      <form method="POST" class="glass form">
+        <label>Verification Code</label>
+        <p class="tiny muted">Check your phone for the 6-digit code we just sent</p>
+        <input type="text" name="code" placeholder="000000" inputmode="numeric" maxlength="6" required autofocus style="letter-spacing:8px;font-size:18px;text-align:center;">
+        <p class="tiny muted" style="margin-top:8px;">Enter digits only (spaces and symbols are ignored)</p>
+        <button class="btn btn-primary glow">Verify</button>
+      </form>
+      
+      <p class="muted tiny center" style="margin-top:16px;">
+        <a href="{{ url_for('auth.logout') }}">Use different number</a>
+      </p>
+    </div>
+  </main>
+</div>
+{% endblock %}

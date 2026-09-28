@@ -1,0 +1,67 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Users{% endblock %}
+{% block content %}
+<form class="admin-toolbar" method="GET">
+  <input name="q" value="{{ q }}" placeholder="Search by name, email, phone">
+  <select name="role" onchange="this.form.submit()">
+    <option value="user" {{ 'selected' if role=='user' }}>Normal Users</option>
+    <option value="public_figure" {{ 'selected' if role=='public_figure' }}>Public Figures</option>
+    <option value="admin" {{ 'selected' if role=='admin' }}>Admins</option>
+  </select>
+  <button class="btn btn-primary sm">Search</button>
+</form>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Photo</th><th>Name</th><th>Phone</th><th>Country</th><th>Verified</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{% if u.profile_photo %}<img class="avatar sm" src="{{ u.profile_photo }}">{% else %}<div class="avatar avatar-fallback sm">{{ u.full_name[0] }}</div>{% endif %}</td>
+        <td><a href="?action=details&uid={{ u.id }}" style="color:#c4b5fd;cursor:pointer;text-decoration:underline;">{{ u.full_name }}</a></td>
+        <td>{{ u.phone }}</td>
+        <td><span class="pill" style="background:rgba(59,130,246,0.2);color:#60a5fa;">{{ u.country_code or '—' }}</span></td>
+        <td>{{ '✓' if u.phone_verified else '✗' }}</td>
+        <td><span class="pill {{ u.status }}">{{ u.status }}</span></td>
+        <td class="actions">
+          {% if u.role == 'user' %}
+            <form method="POST" action="{{ url_for('admin.upgrade_user', user_id=u.id) }}" style="display:inline"><button class="btn btn-ghost xs">Upgrade</button></form>
+          {% endif %}
+          {% if u.role == 'public_figure' %}
+            <form method="POST" action="{{ url_for('admin.downgrade_pf', user_id=u.id) }}" style="display:inline" onsubmit="return confirm('Downgrade to normal user?')"><button class="btn btn-ghost xs">Downgrade</button></form>
+          {% endif %}
+          <form method="POST" action="{{ url_for('admin.toggle_user', uid=u.id) }}" style="display:inline"><button class="btn btn-ghost xs">{{ 'Suspend' if u.status=='active' else 'Activate' }}</button></form>
+          {% if u.role == 'user' %}
+            <button class="btn btn-ghost xs" onclick="openAssign({{ u.id }}, '{{ u.full_name }}')">Assign</button>
+            {% if u.assigned_public_figure_id %}
+              <form method="POST" action="{{ url_for('admin.unassign_user', uid=u.id) }}" style="display:inline"><button class="btn btn-ghost xs">Unassign</button></form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div id="assignModal" class="modal hidden">
+  <div class="modal-content glass">
+    <h3>Assign <span id="assignName"></span></h3>
+    <form method="POST" id="assignForm">
+      <label>Select Public Figure</label>
+      <select name="public_figure_id" required>
+        <option value="">-- choose --</option>
+        {% for pf in pfs %}<option value="{{ pf.id }}">{{ pf.full_name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary glow">ASSIGN</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function openAssign(id, name) {
+  document.getElementById('assignName').textContent = name;
+  document.getElementById('assignForm').action = '/admin/users/' + id + '/assign';
+  document.getElementById('assignModal').classList.remove('hidden');
+}
+</script>
+{% endblock %}

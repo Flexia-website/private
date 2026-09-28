@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Profile | PRIVATE CHAT{% endblock %}
+{% block body_class %}app-bg{% endblock %}
+{% block content %}
+<div class="app-shell">
+  <header class="app-header"><span>Profile</span><a href="{{ url_for('auth.logout') }}" class="muted small">Log out</a></header>
+  <main class="app-main">
+    <div class="glass card-center">
+      <div class="pf-avatar-lg">
+        {% if user.profile_photo %}<img src="{{ user.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ user.full_name[0] }}</div>{% endif %}
+      </div>
+      <h3>{{ user.full_name }}</h3>
+      <p class="muted">{{ user.email }}</p>
+      <p class="muted">{{ user.phone }}</p>
+      {% if public_figure %}
+        {% from "base.html" import verified_badge with context %}
+        <p class="tiny muted">Connected to <strong><span class="name-with-badge">{{ public_figure.full_name }}{% if public_figure.verified %}{{ verified_badge() }}{% endif %}</span></strong></p>
+      {% endif %}
+    </div>
+    <form method="POST" enctype="multipart/form-data" class="glass form">
+      <h3>Edit Profile</h3>
+      <label>Full Name</label>
+      <input name="full_name" value="{{ user.full_name }}">
+      <label>Bio</label>
+      <textarea name="bio">{{ user.bio }}</textarea>
+      <label>Profile Photo</label>
+      <label class="photo-upload-field" id="photoField">
+        <div class="thumb" id="photoThumb">
+          {% if user.profile_photo %}<img src="{{ user.profile_photo }}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">{% else %}<i class="fa-solid fa-camera"></i>{% endif %}
+        </div>
+        <div class="label-text"><strong>Upload a photo</strong><span>PNG or JPG, up to 5MB</span></div>
+        <input type="file" name="photo" accept="image/*" onchange="previewPhoto(this)">
+      </label>
+      <button class="btn btn-primary glow">Save</button>
+    </form>
+    {% if public_figure %}
+      <a href="{{ url_for('user.fan_card') }}" class="btn btn-ghost"><i class="fa-solid fa-id-card"></i> Create Fan Card</a>
+    {% endif %}
+    {% if cards %}
+      <h3 class="section-title">My Fan Cards</h3>
+      <div class="fan-grid">
+        {% for c in cards %}
+          <div class="fan-card glass">
+            <strong>{{ c.name }}</strong>
+            <span class="tiny muted">{{ c.status|upper }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item" href="{{ url_for('user.home') }}"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a class="nav-item" href="{{ url_for('user.chat_with_pf') if user.assigned_public_figure_id else url_for('user.home') }}"><i class="fa-solid fa-comment"></i><span>Chats</span></a>
+    <a class="nav-item" href="{{ url_for('user.calls') }}"><i class="fa-solid fa-phone"></i><span>Calls</span></a>
+    <a class="nav-item active" href="{{ url_for('user.profile') }}"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+  </nav>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function previewPhoto(el) {
+  const f = el.files[0]; if (!f) return;
+  const thumb = document.getElementById('photoThumb');
+  thumb.innerHTML = '<img src="' + URL.createObjectURL(f) + '" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | Public Figure{% endblock %}
+{% block body_class %}app-bg public-bg{% endblock %}
+{% block content %}
+{% from "base.html" import verified_badge with context %}
+<div class="app-shell">
+  <header class="app-header public-header">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="">
+      <span>PUBLIC FIGURE</span>
+    </div>
+    <a href="{{ url_for('auth.logout') }}" class="muted small">Log out</a>
+  </header>
+  <main class="app-main">
+    <div class="glass card-center">
+      <div class="pf-avatar-lg">
+        {% if pf.profile_photo %}<img src="{{ pf.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ pf.full_name[0] }}</div>{% endif %}
+      </div>
+      <h2><span class="name-with-badge">{{ pf.full_name }}{% if pf.verified %}{{ verified_badge('lg') }}{% endif %}</span></h2>
+      <p class="muted">@{{ pf.username or pf.email.split('@')[0] }}</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card glass"><strong>{{ fans_count }}</strong><span>Connected Fans</span></div>
+      <div class="stat-card glass"><strong>{{ pf.followers_count | humanize }}</strong><span>Followers</span></div>
+      <div class="stat-card glass"><strong>{{ pf.likes_count | humanize }}</strong><span>Likes</span></div>
+      <div class="stat-card glass"><strong>{{ chats_count }}</strong><span>Chats</span></div>
+      <div class="stat-card glass"><strong>{{ calls_count }}</strong><span>Calls</span></div>
+    </div>
+    <h3 class="section-title">MY CONNECTED USERS</h3>
+    <div class="fan-list">
+      {% for row in fan_rows %}
+        <a class="fan-card-row glass" href="{{ url_for('public.chat', user_id=row.user.id) }}">
+          <div class="avatar-wrap">
+            {% if row.user.profile_photo %}<img src="{{ row.user.profile_photo }}" class="avatar">{% else %}<div class="avatar avatar-fallback">{{ row.user.full_name[0] }}</div>{% endif %}
+            <span class="online-dot"></span>
+          </div>
+          <div class="fan-info">
+            <strong>{{ row.user.full_name }}</strong>
+            <span class="muted tiny">{{ row.last.message[:40] if row.last else 'Start a conversation' }}</span>
+          </div>
+          <div class="fan-meta">
+            <span class="tiny muted">{{ row.last.created_at.strftime('%H:%M') if row.last else '' }}</span>
+            {% if row.unread %}<span class="unread-badge">{{ row.unread }}</span>{% endif %}
+          </div>
+        </a>
+      {% else %}
+        <p class="muted center">No connected users yet.</p>
+      {% endfor %}
+    </div>
+  </main>
+  <nav class="bottom-nav">
+    <a class="nav-item active" href="{{ url_for('public.dashboard') }}"><i class="fa-solid fa-chart-simple"></i><span>Dashboard</span></a>
+    <a class="nav-item" href="{{ url_for('public.call_video') }}"><i class="fa-solid fa-video"></i><span>Call Video</span></a>
+    <a class="nav-item" href="{{ url_for('public.profile') }}"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+    <a class="nav-item" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></a>
+  </nav>
+</div>
+{% endblock %}
