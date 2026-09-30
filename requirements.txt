@@ -4,7 +4,8 @@ Flask-SQLAlchemy
 SQLAlchemy
 Werkzeug
 python-dotenv
-eventlet
+gevent
+gevent-websocket
 Pillow
 gunicorn
 email-validator
