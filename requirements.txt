@@ -9,7 +9,7 @@ Pillow==10.1.0
 gunicorn==21.2.0
 email-validator==2.1.0
 phonenumbers==8.13.0
-opencv-python==4.8.1.78
+opencv-python-headless==4.8.1.78
 numpy==1.24.3
-# dlib==19.24.2
+dlib==19.24.2
 scipy==1.11.3
