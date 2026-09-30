@@ -20,18 +20,20 @@
 <h3 class="section-title">All Public Figures</h3>
 <div class="admin-table-wrap">
   <table class="admin-table">
-    <thead><tr><th>Photo</th><th>Name</th><th>Email</th><th>Phone</th><th>Followers</th><th>Likes</th><th>Status</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Photo</th><th>Name</th><th>Email</th><th>Phone</th><th>Followers</th><th>Likes</th><th>Status</th><th>Verified</th><th>Actions</th></tr></thead>
     <tbody>
       {% for pf in pfs %}
       <tr>
         <td>{% if pf.profile_photo %}<img class="avatar sm" src="{{ pf.profile_photo }}">{% else %}<div class="avatar avatar-fallback sm">{{ pf.full_name[0] }}</div>{% endif %}</td>
-        <td>{{ pf.full_name }}<svg class="verified-badge" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px;display:inline-block;margin-left:5px;vertical-align:-3px;filter:drop-shadow(0 0 3px rgba(10,132,255,0.7))"><defs><linearGradient id="vb2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fa9ff"/><stop offset="1" stop-color="#0a84ff"/></linearGradient></defs><path fill="url(#vb2)" d="M24 2.6l4.9 3.6 6-.8 2.6 5.5 5.5 2.6-.8 6 3.6 4.9-3.6 4.9.8 6-5.5 2.6-2.6 5.5-6-.8-4.9 3.6-4.9-3.6-6 .8-2.6-5.5-5.5-2.6.8-6L2.6 24l3.6-4.9-.8-6 5.5-2.6 2.6-5.5 6 .8L24 2.6z"/><path fill="#ffffff" d="M20.5 30.6l-5.1-5.1 2.1-2.1 3 3 8.1-8.1 2.1 2.1-10.2 10.2z"/></svg></td>
+        <td>{{ pf.full_name }}{% if pf.verified %}<svg class="verified-badge" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px;display:inline-block;margin-left:5px;vertical-align:-3px;filter:drop-shadow(0 0 3px rgba(10,132,255,0.7))"><defs><linearGradient id="vb2-{{ pf.id }}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fa9ff"/><stop offset="1" stop-color="#0a84ff"/></linearGradient></defs><path fill="url(#vb2-{{ pf.id }})" d="M24 2.6l4.9 3.6 6-.8 2.6 5.5 5.5 2.6-.8 6 3.6 4.9-3.6 4.9.8 6-5.5 2.6-2.6 5.5-6-.8-4.9 3.6-4.9-3.6-6 .8-2.6-5.5-5.5-2.6.8-6L2.6 24l3.6-4.9-.8-6 5.5-2.6 2.6-5.5 6 .8L24 2.6z"/><path fill="#ffffff" d="M20.5 30.6l-5.1-5.1 2.1-2.1 3 3 8.1-8.1 2.1 2.1-10.2 10.2z"/></svg>{% endif %}</td>
         <td>{{ pf.email }}</td>
         <td>{{ pf.phone }}</td>
         <td>{{ pf.followers_count | humanize }}</td>
         <td>{{ pf.likes_count | humanize }}</td>
         <td><span class="pill {{ pf.status }}">{{ pf.status }}</span></td>
+        <td><span class="pill {{ 'approved' if pf.verified else 'pending' }}">{{ 'Verified' if pf.verified else 'Unverified' }}</span></td>
         <td class="actions">
+          <form method="POST" action="{{ url_for('admin.toggle_verified', pf_id=pf.id) }}" style="display:inline"><button class="btn btn-ghost xs">{{ 'Unverify' if pf.verified else 'Verify' }}</button></form>
           <form method="POST" action="{{ url_for('admin.downgrade_pf', user_id=pf.id) }}" style="display:inline" onsubmit="return confirm('Downgrade this public figure?')"><button class="btn btn-ghost xs">Downgrade</button></form>
           <form method="POST" action="{{ url_for('admin.toggle_user', uid=pf.id) }}" style="display:inline"><button class="btn btn-ghost xs">{{ 'Suspend' if pf.status=='active' else 'Activate' }}</button></form>
         </td>

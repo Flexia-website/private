@@ -1,0 +1,197 @@
+{% extends "admin/base.html" %}
+{% block page_title %}Design Editor - {{ design.name }}{% endblock %}
+{% block content %}
+<div class="glass form" style="margin-bottom:16px;">
+  <h3>Background Image</h3>
+  <label class="photo-upload-field" id="bgField">
+    <div class="thumb" style="width:56px;height:56px;">
+      {% if design.preview %}<img src="{{ design.preview }}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">{% else %}<i class="fa-solid fa-image"></i>{% endif %}
+    </div>
+    <div class="label-text"><strong>{{ 'Replace background' if design.preview else 'Upload background' }}</strong><span>This is the fan card template image</span></div>
+    <input type="file" id="bgInput" accept="image/*" onchange="uploadBg(this)">
+  </label>
+</div>
+
+{% if design.preview %}
+<div class="glass form">
+  <h3>Position Fields</h3>
+  <p class="muted tiny" style="margin-bottom:10px;">Drag each box onto the card. Resize with the bottom-right handle. Toggle fields off if the design doesn't use them.</p>
+  <div id="editorCanvas" class="editor-canvas">
+    <img src="{{ design.preview }}" id="bgImg" class="editor-bg">
+    <div class="editor-field" data-field="name" style="display:none;">
+      <span class="editor-field-label">Name</span>
+      <div class="editor-resize-handle"></div>
+    </div>
+    <div class="editor-field" data-field="photo" style="display:none;">
+      <span class="editor-field-label">Photo</span>
+      <div class="editor-resize-handle"></div>
+    </div>
+    <div class="editor-field" data-field="expiry_date" style="display:none;">
+      <span class="editor-field-label">Expiry Date</span>
+      <div class="editor-resize-handle"></div>
+    </div>
+    <div class="editor-field" data-field="special_code" style="display:none;">
+      <span class="editor-field-label">Special Code</span>
+      <div class="editor-resize-handle"></div>
+    </div>
+  </div>
+
+  <div class="editor-controls">
+    {% for key, label in [('name','Name'), ('photo','Photo'), ('expiry_date','Expiry Date'), ('special_code','Special Code')] %}
+    <div class="editor-field-controls">
+      <label class="checkbox-row"><input type="checkbox" id="enable_{{ key }}" onchange="toggleField('{{ key }}')"> {{ label }}</label>
+      {% if key != 'photo' %}
+      <div class="editor-field-opts">
+        <input type="number" id="fs_{{ key }}" placeholder="Font size %" value="5" min="1" max="20" step="0.5" onchange="updateOpt('{{ key }}')">
+        <input type="color" id="color_{{ key }}" value="#ffffff" onchange="updateOpt('{{ key }}')">
+        <select id="align_{{ key }}" onchange="updateOpt('{{ key }}')">
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <button class="btn btn-primary glow" onclick="saveFields()" style="margin-top:16px;width:100%;">Save Layout</button>
+  <div id="editorStatus" class="tiny" style="margin-top:8px;"></div>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+const DESIGN_ID = {{ design.id }};
+const EXISTING_FIELDS = {{ fields | tojson }};
+
+async function uploadBg(el) {
+  const f = el.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append('background', f);
+  const r = await fetch('{{ url_for("admin.design_editor_bg", did=design.id) }}', {method:'POST', body: fd});
+  const d = await r.json();
+  if (d.ok) window.location.reload();
+}
+
+const canvas = document.getElementById('editorCanvas');
+const bgImg = document.getElementById('bgImg');
+
+function fieldEl(key) { return document.querySelector('.editor-field[data-field="' + key + '"]'); }
+
+function applyFieldStyle(key, f) {
+  const el = fieldEl(key);
+  el.style.left = f.x + '%';
+  el.style.top = f.y + '%';
+  el.style.width = f.w + '%';
+  el.style.height = f.h + '%';
+  el.style.display = f.enabled ? 'flex' : 'none';
+  if (key !== 'photo') {
+    el.style.color = f.color || '#ffffff';
+    // fontPct is a % of the image HEIGHT - convert to px using the canvas's
+    // current rendered height so the preview always matches the final PNG's proportions
+    const canvasH = canvas.getBoundingClientRect().height || 1;
+    el.style.fontSize = ((f.fontPct || 5) / 100 * canvasH) + 'px';
+    el.style.justifyContent = f.align === 'center' ? 'center' : f.align === 'right' ? 'flex-end' : 'flex-start';
+  }
+}
+
+function defaultField(key) {
+  const defaults = {
+    name: {x: 10, y: 70, w: 60, h: 10, fontPct: 6, color: '#ffffff', align: 'left', enabled: false},
+    photo: {x: 10, y: 10, w: 25, h: 25, fontPct: 0, color: '', align: '', enabled: false},
+    expiry_date: {x: 10, y: 85, w: 40, h: 6, fontPct: 3.5, color: '#ffffff', align: 'left', enabled: false},
+    special_code: {x: 55, y: 85, w: 40, h: 6, fontPct: 3.5, color: '#ffffff', align: 'right', enabled: false},
+  };
+  return defaults[key];
+}
+
+let fieldsState = {};
+['name','photo','expiry_date','special_code'].forEach(key => {
+  fieldsState[key] = Object.assign({}, defaultField(key), EXISTING_FIELDS[key] || {});
+  applyFieldStyle(key, fieldsState[key]);
+  const cb = document.getElementById('enable_' + key);
+  if (cb) cb.checked = fieldsState[key].enabled;
+  if (key !== 'photo') {
+    const fs = document.getElementById('fs_' + key);
+    const co = document.getElementById('color_' + key);
+    const al = document.getElementById('align_' + key);
+    if (fs) fs.value = fieldsState[key].fontPct;
+    if (co) co.value = fieldsState[key].color;
+    if (al) al.value = fieldsState[key].align;
+  }
+});
+
+function toggleField(key) {
+  fieldsState[key].enabled = document.getElementById('enable_' + key).checked;
+  applyFieldStyle(key, fieldsState[key]);
+}
+function updateOpt(key) {
+  const fs = document.getElementById('fs_' + key);
+  const co = document.getElementById('color_' + key);
+  const al = document.getElementById('align_' + key);
+  if (fs) fieldsState[key].fontPct = parseFloat(fs.value) || 5;
+  if (co) fieldsState[key].color = co.value;
+  if (al) fieldsState[key].align = al.value;
+  applyFieldStyle(key, fieldsState[key]);
+}
+
+// Drag + resize handling
+let activeDrag = null;
+document.querySelectorAll('.editor-field').forEach(el => {
+  el.addEventListener('mousedown', startDrag);
+  el.addEventListener('touchstart', startDrag, {passive: false});
+});
+function startDrag(e) {
+  const el = e.currentTarget;
+  const isResize = e.target.classList.contains('editor-resize-handle');
+  const rect = canvas.getBoundingClientRect();
+  const point = e.touches ? e.touches[0] : e;
+  activeDrag = { el, key: el.dataset.field, isResize, startX: point.clientX, startY: point.clientY, rect };
+  e.preventDefault();
+}
+function onMove(e) {
+  if (!activeDrag) return;
+  const point = e.touches ? e.touches[0] : e;
+  const { el, key, isResize, rect } = activeDrag;
+  const f = fieldsState[key];
+  const dxPct = ((point.clientX - activeDrag.startX) / rect.width) * 100;
+  const dyPct = ((point.clientY - activeDrag.startY) / rect.height) * 100;
+  if (isResize) {
+    f.w = Math.max(5, f.w + dxPct);
+    f.h = Math.max(3, f.h + dyPct);
+  } else {
+    f.x = Math.min(100 - f.w, Math.max(0, f.x + dxPct));
+    f.y = Math.min(100 - f.h, Math.max(0, f.y + dyPct));
+  }
+  activeDrag.startX = point.clientX;
+  activeDrag.startY = point.clientY;
+  applyFieldStyle(key, f);
+  e.preventDefault();
+}
+function endDrag() { activeDrag = null; }
+document.addEventListener('mousemove', onMove);
+document.addEventListener('touchmove', onMove, {passive: false});
+document.addEventListener('mouseup', endDrag);
+document.addEventListener('touchend', endDrag);
+window.addEventListener('resize', () => {
+  Object.keys(fieldsState).forEach(key => applyFieldStyle(key, fieldsState[key]));
+});
+
+async function saveFields() {
+  const status = document.getElementById('editorStatus');
+  status.textContent = 'Saving...'; status.style.color = '#9ca3af';
+  try {
+    const r = await fetch('{{ url_for("admin.design_editor_save", did=design.id) }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fields: fieldsState})
+    });
+    const d = await r.json();
+    status.textContent = d.ok ? 'Saved!' : (d.error || 'Failed');
+    status.style.color = d.ok ? '#86efac' : '#fca5a5';
+  } catch (e) {
+    status.textContent = 'Failed to save'; status.style.color = '#fca5a5';
+  }
+}
+</script>
+{% endblock %}

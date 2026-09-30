@@ -13,15 +13,19 @@
       <label>Your Photo</label>
       <input type="file" name="photo" accept="image/*">
       <label>Choose Design</label>
+      {% if designs %}
       <div class="design-grid">
         {% for d in designs %}
           <label class="design-opt">
             <input type="radio" name="design_id" value="{{ d.id }}" {% if loop.first %}checked{% endif %}>
-            <div class="design-preview">{{ d.name }}</div>
+            {% if d.preview %}<img src="{{ d.preview }}" class="design-preview-img">{% else %}<div class="design-preview">{{ d.name }}</div>{% endif %}
           </label>
         {% endfor %}
       </div>
       <button class="btn btn-primary glow">CREATE FAN CARD</button>
+      {% else %}
+      <p class="muted tiny">{{ public_figure.full_name }} hasn't added any fan card designs yet. Check back later.</p>
+      {% endif %}
     </form>
   </main>
 </div>

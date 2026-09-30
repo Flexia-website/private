@@ -6,10 +6,11 @@
   <header class="app-header"><a href="{{ url_for('user.home') }}" class="back"><i class="fa-solid fa-arrow-left"></i></a><span>Public Figure</span></header>
   <main class="app-main">
     <div class="glass card-center">
+      {% from "base.html" import verified_badge with context %}
       <div class="pf-avatar-lg">
         {% if pf.profile_photo %}<img src="{{ pf.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ pf.full_name[0] }}</div>{% endif %}
+        {% if pf.verified %}<span class="avatar-badge-corner">{{ verified_badge() }}</span>{% endif %}
       </div>
-      {% from "base.html" import verified_badge with context %}
       <h2><span class="name-with-badge">{{ pf.full_name }}{% if pf.verified %}{{ verified_badge('lg') }}{% endif %}</span></h2>
       <p class="muted">@{{ pf.username or 'publicfigure' }}</p>
       <p class="bio">{{ pf.bio or 'Verified Public Figure' }}</p>

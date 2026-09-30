@@ -19,8 +19,20 @@
     {% endif %}
     <h3 class="section-title">Recent</h3>
     {% for c in calls %}
-      <div class="notif glass">
-        <strong>{{ 'Outgoing' if c.caller_id == user.id else 'Incoming' }} {{ c.call_type }}</strong>
+      <div class="notif glass call-row">
+        <div class="call-row-icon call-status-{{ c.status }}">
+          {% if c.call_type == 'video' %}<i class="fa-solid fa-video"></i>{% else %}<i class="fa-solid fa-phone"></i>{% endif %}
+        </div>
+        <div class="call-row-info">
+          <strong>{{ 'Outgoing' if c.caller_id == user.id else 'Incoming' }} {{ c.call_type }}</strong>
+          <span class="muted tiny call-status-label call-status-{{ c.status }}">
+            {% if c.status == 'completed' %}Completed{% if c.duration %} &middot; {{ (c.duration // 60) }}m {{ (c.duration % 60) }}s{% endif %}
+            {% elif c.status == 'missed' %}Missed
+            {% elif c.status == 'declined' %}Declined
+            {% elif c.status == 'failed' %}Failed
+            {% else %}Ringing{% endif %}
+          </span>
+        </div>
         <span class="muted tiny">{{ c.created_at.strftime('%b %d, %H:%M') }}</span>
       </div>
     {% else %}

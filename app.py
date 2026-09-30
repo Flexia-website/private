@@ -3,6 +3,7 @@ import json
 import random
 import base64
 from datetime import datetime
+from PIL import Image, ImageDraw, ImageFont
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify)
 from flask_socketio import SocketIO, emit, join_room
@@ -49,6 +50,17 @@ def allowed_file(filename, kinds=("image",)):
     return False
 
 
+def generate_card_expiry_and_code():
+    """Fan card expiry is always exactly 1 year from creation, and the
+    special code is always a fixed 7-character random alphanumeric string.
+    Users never choose either - both are system-generated."""
+    import string
+    from datetime import timedelta
+    expiry = (datetime.utcnow().replace(microsecond=0) + timedelta(days=365)).strftime("%Y-%m-%d")
+    code = "".join(random.choices(string.ascii_uppercase + string.digits, k=7))
+    return expiry, code
+
+
 def save_upload(file, kinds=("image",)):
     if not file or file.filename == "":
         return ""
@@ -58,6 +70,80 @@ def save_upload(file, kinds=("image",)):
     path = os.path.join(app.config["UPLOAD_FOLDER"], fname)
     file.save(path)
     return "/static/uploads/" + fname
+
+
+def generate_fan_card_png(design, card):
+    """Composite the design's background with the user's submitted values
+    at the field positions saved by the admin editor. Returns the saved
+    file's public URL, or "" if generation isn't possible (no background
+    or no layout saved yet)."""
+    if not design.preview or not design.design_data:
+        return ""
+    try:
+        fields = json.loads(design.design_data)
+    except Exception:
+        return ""
+    if not fields:
+        return ""
+
+    bg_path = design.preview.lstrip("/")
+    if not os.path.exists(bg_path):
+        return ""
+
+    try:
+        base_img = Image.open(bg_path).convert("RGBA")
+        W, H = base_img.size
+        draw = ImageDraw.Draw(base_img)
+
+        def font_for(size):
+            try:
+                return ImageFont.truetype("DejaVuSans-Bold.ttf", size)
+            except Exception:
+                return ImageFont.load_default()
+
+        text_values = {
+            "name": card.name or "",
+            "expiry_date": card.expiry_date or "",
+            "special_code": card.special_code or "",
+        }
+        for key, val in text_values.items():
+            f = fields.get(key)
+            if not f or not f.get("enabled") or not val:
+                continue
+            x = f["x"] / 100 * W
+            y = f["y"] / 100 * H
+            w = f["w"] / 100 * W
+            font = font_for(max(8, int(f.get("fontPct", 5) / 100 * H)))
+            color = f.get("color", "#ffffff")
+            align = f.get("align", "left")
+            bbox = draw.textbbox((0, 0), val, font=font)
+            text_w = bbox[2] - bbox[0]
+            draw_x = x
+            if align == "center":
+                draw_x = x + (w - text_w) / 2
+            elif align == "right":
+                draw_x = x + w - text_w
+            draw.text((draw_x, y), val, font=font, fill=color)
+
+        photo_field = fields.get("photo")
+        if photo_field and photo_field.get("enabled") and card.photo:
+            photo_path = card.photo.lstrip("/")
+            if os.path.exists(photo_path):
+                px = int(photo_field["x"] / 100 * W)
+                py = int(photo_field["y"] / 100 * H)
+                pw = int(photo_field["w"] / 100 * W)
+                ph = int(photo_field["h"] / 100 * H)
+                user_photo = Image.open(photo_path).convert("RGBA")
+                user_photo = user_photo.resize((max(1, pw), max(1, ph)))
+                base_img.paste(user_photo, (px, py), user_photo)
+
+        out_name = "%d_fancard_%d.png" % (int(datetime.utcnow().timestamp()), card.id)
+        out_path = os.path.join(app.config["UPLOAD_FOLDER"], out_name)
+        base_img.convert("RGB").save(out_path, "PNG")
+        return "/static/uploads/" + out_name
+    except Exception as e:
+        print("[FAN CARD] PNG generation failed:", e)
+        return ""
 
 
 def humanize_count(n):
@@ -124,6 +210,7 @@ def inject_globals():
 
 
 app.jinja_env.filters["humanize"] = humanize_count
+app.jinja_env.filters["from_json"] = lambda s: __import__("json").loads(s) if s else {}
 
 
 # ---------------- Root ----------------
@@ -404,19 +491,30 @@ def user_fan_card():
         return redirect(url_for("user.home"))
     if request.method == "POST":
         design_id = request.form.get("design_id", "")
-        msg = request.form.get("message", "").strip()
+        card_name = request.form.get("name", "").strip()
         design = None
         if design_id.isdigit():
             design = FanCardDesign.query.get(int(design_id))
-        if not design:
-            flash("Invalid design.", "error")
+        if not design or not design.active or design.assigned_public_figure_id != pf.id:
+            flash("Please choose a valid design.", "error")
         else:
-            card = FanCard(user_id=u.id, public_figure_id=pf.id, design_id=design.id, name=msg)
+            photo_url = ""
+            photo_file = request.files.get("photo")
+            if photo_file and photo_file.filename:
+                photo_url = save_upload(photo_file) or ""
+            expiry, code = generate_card_expiry_and_code()
+            card = FanCard(user_id=u.id, public_figure_id=pf.id, design_id=design.id,
+                            name=card_name, photo=photo_url,
+                            expiry_date=expiry, special_code=code)
             db.session.add(card)
             db.session.commit()
+            png_url = generate_fan_card_png(design, card)
+            if png_url:
+                card.generated_card = png_url
+                db.session.commit()
             flash("Fan card created! Awaiting approval.", "info")
             return redirect(url_for("user.profile"))
-    designs = FanCardDesign.query.filter_by(public_figure_id=u.assigned_public_figure_id, active=True).all()
+    designs = FanCardDesign.query.filter_by(assigned_public_figure_id=u.assigned_public_figure_id, active=True).all()
     return render_template("user/fan_card.html", user=u, public_figure=pf, designs=designs)
 
 
@@ -456,6 +554,17 @@ def public_dashboard():
                          followers_count=followers_count, likes_count=likes_count,
                          fans_count=fans_count, chats_count=chats_count, calls_count=calls_count,
                          fan_rows=fan_rows)
+
+
+@app.route("/public/calls", endpoint="public.calls")
+@public_figure_required
+def public_calls():
+    pf = current_user()
+    calls = Call.query.filter((Call.caller_id == pf.id) | (Call.receiver_id == pf.id))\
+                       .order_by(Call.created_at.desc()).limit(50).all()
+    peer_ids = {c.caller_id if c.caller_id != pf.id else c.receiver_id for c in calls}
+    peers = {u.id: u for u in User.query.filter(User.id.in_(peer_ids)).all()} if peer_ids else {}
+    return render_template("public/calls.html", pf=pf, calls=calls, peers=peers)
 
 
 @app.route("/public/chat", endpoint="public.chat")
@@ -617,6 +726,17 @@ def admin_toggle_user(uid):
     return jsonify({"ok": True, "status": u.status})
 
 
+@app.route("/admin/public-figures/<int:pf_id>/toggle-verified", methods=["POST"], endpoint="admin.toggle_verified")
+@admin_required
+def admin_toggle_verified(pf_id):
+    pf = User.query.get_or_404(pf_id)
+    if pf.role != "public_figure":
+        return jsonify({"ok": False, "error": "Not a public figure."}), 400
+    pf.verified = not pf.verified
+    db.session.commit()
+    return jsonify({"ok": True, "verified": pf.verified})
+
+
 @app.route("/admin/assign", endpoint="admin.assign_page")
 @admin_required
 def admin_assign_page():
@@ -658,9 +778,15 @@ def admin_fan_cards():
         name = request.form.get("name", "").strip()
         pf = User.query.get(int(pf_id)) if pf_id.isdigit() else None
         if not pf:
-            flash("Invalid public figure.", "error")
+            flash("Please choose a public figure to assign this design to.", "error")
+        elif not name:
+            flash("Please enter a design name.", "error")
         else:
-            design = FanCardDesign(public_figure_id=pf.id, name=name, active=True)
+            preview_url = ""
+            preview_file = request.files.get("preview")
+            if preview_file and preview_file.filename:
+                preview_url = save_upload(preview_file) or ""
+            design = FanCardDesign(assigned_public_figure_id=pf.id, name=name, preview=preview_url, active=True)
             db.session.add(design)
             db.session.commit()
             flash("Design added.", "success")
@@ -673,9 +799,70 @@ def admin_fan_cards():
 @admin_required
 def admin_assign_design(did):
     design = FanCardDesign.query.get_or_404(did)
+    pf_id = request.form.get("pf_id", "")
+    design.assigned_public_figure_id = int(pf_id) if pf_id.isdigit() else None
+    db.session.commit()
+    flash("Design assignment updated.", "success")
+    return redirect(url_for("admin.fan_cards"))
+
+
+@app.route("/admin/fan-cards/<int:did>/toggle-active", methods=["POST"], endpoint="admin.toggle_design_active")
+@admin_required
+def admin_toggle_design_active(did):
+    design = FanCardDesign.query.get_or_404(did)
     design.active = not design.active
     db.session.commit()
-    return jsonify({"ok": True, "active": design.active})
+    return redirect(url_for("admin.fan_cards"))
+
+
+@app.route("/admin/fan-cards/<int:did>/editor", endpoint="admin.design_editor")
+@admin_required
+def admin_design_editor(did):
+    design = FanCardDesign.query.get_or_404(did)
+    fields = {}
+    try:
+        fields = json.loads(design.design_data) if design.design_data else {}
+    except Exception:
+        fields = {}
+    return render_template("admin/design_editor.html", design=design, fields=fields)
+
+
+@app.route("/admin/fan-cards/<int:did>/editor/background", methods=["POST"], endpoint="admin.design_editor_bg")
+@admin_required
+def admin_design_editor_bg(did):
+    design = FanCardDesign.query.get_or_404(did)
+    bg = request.files.get("background")
+    if not bg or not bg.filename:
+        return jsonify({"ok": False, "error": "No image provided"}), 400
+    url = save_upload(bg)
+    if not url:
+        return jsonify({"ok": False, "error": "Failed to save image"}), 400
+    design.preview = url
+    db.session.commit()
+    return jsonify({"ok": True, "url": url})
+
+
+@app.route("/admin/fan-cards/<int:did>/editor/save", methods=["POST"], endpoint="admin.design_editor_save")
+@admin_required
+def admin_design_editor_save(did):
+    design = FanCardDesign.query.get_or_404(did)
+    data = request.get_json(silent=True) or {}
+    fields = data.get("fields", {})
+    clean = {}
+    for key in ("name", "photo", "expiry_date", "special_code"):
+        if key in fields and isinstance(fields[key], dict):
+            f = fields[key]
+            clean[key] = {
+                "x": float(f.get("x", 0)), "y": float(f.get("y", 0)),
+                "w": float(f.get("w", 20)), "h": float(f.get("h", 8)),
+                "fontPct": max(1, min(20, float(f.get("fontPct", 5)))),
+                "color": str(f.get("color", "#ffffff"))[:20],
+                "align": str(f.get("align", "left"))[:10],
+                "enabled": bool(f.get("enabled", True)),
+            }
+    design.design_data = json.dumps(clean)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/admin/fan-cards/<int:did>/delete", methods=["POST"], endpoint="admin.delete_design")
@@ -701,6 +888,23 @@ def admin_fan_card_action(cid, action):
     card = FanCard.query.get_or_404(cid)
     if action == "approve":
         card.status = "approved"
+        image_url = card.generated_card or card.photo
+        if image_url and card.public_figure_id:
+            m = Message(sender_id=card.public_figure_id, receiver_id=card.user_id,
+                        message="Your fan card was approved! 🎉", message_type="image",
+                        media_url=image_url)
+            db.session.add(m)
+            db.session.commit()
+            socketio.emit("message", {
+                "id": m.id, "sender_id": card.public_figure_id, "receiver_id": card.user_id,
+                "message": m.message, "type": "image", "media": image_url,
+                "created_at": m.created_at.isoformat(), "read": False
+            }, room="user_%d" % card.user_id)
+            socketio.emit("message", {
+                "id": m.id, "sender_id": card.public_figure_id, "receiver_id": card.user_id,
+                "message": m.message, "type": "image", "media": image_url,
+                "created_at": m.created_at.isoformat(), "read": False
+            }, room="user_%d" % card.public_figure_id)
     elif action == "reject":
         card.status = "rejected"
     db.session.commit()
@@ -901,6 +1105,39 @@ def api_notif_read():
     return jsonify({"ok": True})
 
 
+import re as _re
+def extract_link_preview(url):
+    """Fetch a title/thumbnail for a pasted TikTok or YouTube link via oEmbed."""
+    try:
+        import urllib.request, json as _json
+        yt = _re.search(r'(youtube\.com/watch\?v=|youtu\.be/)([\w-]+)', url)
+        tt = _re.search(r'tiktok\.com', url)
+        if yt:
+            oembed = "https://www.youtube.com/oembed?url=%s&format=json" % urllib.request.quote(url, safe="")
+        elif tt:
+            oembed = "https://www.tiktok.com/oembed?url=%s" % urllib.request.quote(url, safe="")
+        else:
+            return None
+        with urllib.request.urlopen(oembed, timeout=5) as r:
+            data = _json.loads(r.read().decode())
+        return {"title": data.get("title", ""), "thumbnail": data.get("thumbnail_url", ""),
+                "provider": "youtube" if yt else "tiktok", "url": url}
+    except Exception:
+        return None
+
+
+@app.route("/api/link-preview", methods=["POST"])
+@login_required
+def api_link_preview():
+    url = (request.get_json(silent=True) or {}).get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "No URL provided"}), 400
+    preview = extract_link_preview(url)
+    if not preview:
+        return jsonify({"ok": False, "error": "Only TikTok/YouTube links are supported"}), 400
+    return jsonify({"ok": True, "preview": preview})
+
+
 @app.route("/api/upload-voice", methods=["POST"], endpoint="api.upload_voice_note")
 @login_required
 def upload_voice_note():
@@ -966,6 +1203,9 @@ def on_message(data):
     text = data.get("message", "")
     mtype = data.get("type", "text")
     media = data.get("media", "")
+    if mtype == "link":
+        import json as _json
+        text = _json.dumps(data.get("link_preview", {}))
     m = Message(sender_id=uid, receiver_id=to, message=text,
                 message_type=mtype, media_url=media)
     db.session.add(m)
@@ -988,15 +1228,40 @@ def on_read(data):
         emit("read", {"by": uid}, room="user_%d" % int(peer))
 
 
+_active_calls = {}  # (caller_id, receiver_id) -> Call.id, for the currently ringing/connected call between this pair
+
+@socketio.on("disconnect")
+def on_disconnect():
+    uid = session.get("user_id")
+    if not uid:
+        return
+    # Clean up any call this socket was part of that never got a proper end signal
+    stale_keys = [k for k in _active_calls if uid in k]
+    for k in stale_keys:
+        call_pk = _active_calls.pop(k, None)
+        if call_pk:
+            call = Call.query.get(call_pk)
+            if call and call.status == "ringing":
+                call.status = "failed"
+                call.ended_at = datetime.utcnow()
+                db.session.commit()
+
+
 @socketio.on("call:offer")
 def call_offer(data):
     uid = session.get("user_id")
     to = data.get("to")
     if uid and to and str(to).isdigit():
+        to_id = int(to)
+        call = Call(caller_id=uid, receiver_id=to_id,
+                    call_type=data.get("type", "voice"), status="ringing")
+        db.session.add(call)
+        db.session.commit()
+        _active_calls[(uid, to_id)] = call.id
         emit("call:offer", {"from": uid, "sdp": data.get("sdp"),
                             "type": data.get("type", "voice"),
-                            "name": data.get("name", "")},
-             room="user_%d" % int(to))
+                            "name": data.get("name", ""), "call_id": call.id},
+             room="user_%d" % to_id)
 
 
 @socketio.on("call:answer")
@@ -1005,6 +1270,13 @@ def call_answer(data):
     to = data.get("to")
     if not uid or not to or not str(to).isdigit():
         return
+    to_id = int(to)
+    call_pk = _active_calls.get((to_id, uid))  # caller was `to_id`, we (uid) are the receiver answering
+    if call_pk:
+        call = Call.query.get(call_pk)
+        if call:
+            call.status = "completed"
+            db.session.commit()
     payload = {"from": uid, "sdp": data.get("sdp")}
     if data.get("premade"):
         # Never trust the client's claimed video; always re-verify against the DB
@@ -1012,7 +1284,7 @@ def call_answer(data):
         if pf and pf.is_public_figure and pf.call_video_url:
             payload["premade"] = True
             payload["video_url"] = pf.call_video_url
-    emit("call:answer", payload, room="user_%d" % int(to))
+    emit("call:answer", payload, room="user_%d" % to_id)
 
 
 @socketio.on("call:ice")
@@ -1028,7 +1300,19 @@ def call_end(data):
     uid = session.get("user_id")
     to = data.get("to")
     if uid and to and str(to).isdigit():
-        emit("call:end", {"from": uid}, room="user_%d" % int(to))
+        to_id = int(to)
+        call_pk = _active_calls.pop((uid, to_id), None) or _active_calls.pop((to_id, uid), None)
+        if call_pk:
+            call = Call.query.get(call_pk)
+            if call and call.status == "ringing":
+                call.status = "declined" if call.receiver_id == uid else "missed"
+                call.ended_at = datetime.utcnow()
+                db.session.commit()
+            elif call and call.status == "completed" and not call.ended_at:
+                call.ended_at = datetime.utcnow()
+                call.duration = int((call.ended_at - call.created_at).total_seconds())
+                db.session.commit()
+        emit("call:end", {"from": uid}, room="user_%d" % to_id)
 
 
 # ---------------- Lip Sync ----------------

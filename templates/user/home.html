@@ -15,11 +15,12 @@
   </header>
   <main class="app-main">
     {% if public_figure %}
+      {% from "base.html" import verified_badge with context %}
       <div class="glass card-center connect-card">
         <div class="pf-avatar-lg">
           {% if public_figure.profile_photo %}<img src="{{ public_figure.profile_photo }}">{% else %}<div class="avatar avatar-fallback xl">{{ public_figure.full_name[0]|upper }}</div>{% endif %}
+          {% if public_figure.verified %}<span class="avatar-badge-corner">{{ verified_badge() }}</span>{% endif %}
         </div>
-        {% from "base.html" import verified_badge with context %}
         <h2><span class="name-with-badge">Connected to {{ public_figure.full_name }}{% if public_figure.verified %}{{ verified_badge('lg') }}{% endif %}</span></h2>
         <p class="muted">You are permanently connected to this public figure.</p>
         <div class="row-btns">

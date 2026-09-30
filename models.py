@@ -75,8 +75,10 @@ class Call(db.Model):
     caller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     receiver_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     call_type = db.Column(db.String(10), default="voice")
+    status = db.Column(db.String(20), default="ringing")  # ringing, completed, declined, missed, failed
     duration = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ended_at = db.Column(db.DateTime, nullable=True)
 
 class FanCardDesign(db.Model):
     __tablename__ = "fan_card_designs"
@@ -95,6 +97,8 @@ class FanCard(db.Model):
     design_id = db.Column(db.Integer, db.ForeignKey("fan_card_designs.id"), nullable=True)
     name = db.Column(db.String(120))
     photo = db.Column(db.String(255), default="")
+    expiry_date = db.Column(db.String(20), default="")
+    special_code = db.Column(db.String(40), default="")
     generated_card = db.Column(db.String(255), default="")
     status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

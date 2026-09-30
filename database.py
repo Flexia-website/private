@@ -18,6 +18,26 @@ def migrate_columns():
             db.session.execute(text("ALTER TABLE users ADD COLUMN call_video_url VARCHAR(255) DEFAULT ''"))
             db.session.commit()
             print("[BOOT] Migrated: added users.call_video_url")
+
+        call_cols = {c["name"] for c in inspector.get_columns("calls")}
+        if "status" not in call_cols:
+            db.session.execute(text("ALTER TABLE calls ADD COLUMN status VARCHAR(20) DEFAULT 'ringing'"))
+            db.session.commit()
+            print("[BOOT] Migrated: added calls.status")
+        if "ended_at" not in call_cols:
+            db.session.execute(text("ALTER TABLE calls ADD COLUMN ended_at DATETIME"))
+            db.session.commit()
+            print("[BOOT] Migrated: added calls.ended_at")
+
+        fc_cols = {c["name"] for c in inspector.get_columns("fan_cards")}
+        if "expiry_date" not in fc_cols:
+            db.session.execute(text("ALTER TABLE fan_cards ADD COLUMN expiry_date VARCHAR(20) DEFAULT ''"))
+            db.session.commit()
+            print("[BOOT] Migrated: added fan_cards.expiry_date")
+        if "special_code" not in fc_cols:
+            db.session.execute(text("ALTER TABLE fan_cards ADD COLUMN special_code VARCHAR(40) DEFAULT ''"))
+            db.session.commit()
+            print("[BOOT] Migrated: added fan_cards.special_code")
     except Exception as e:
         db.session.rollback()
         print("[BOOT] Migration check skipped/failed:", e)

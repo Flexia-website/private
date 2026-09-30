@@ -6,6 +6,11 @@
   <form method="POST" enctype="multipart/form-data">
     <label>Design Name</label><input name="name" required>
     <label>Preview Image</label><input type="file" name="preview" accept="image/*">
+    <label>Assign to Public Figure</label>
+    <select name="pf_id" required>
+      <option value="">-- choose a public figure --</option>
+      {% for pf in pfs %}<option value="{{ pf.id }}">{{ pf.full_name }}</option>{% endfor %}
+    </select>
     <button class="btn btn-primary glow">Create</button>
   </form>
 </div>
@@ -20,14 +25,21 @@
         <td>{{ d.name }}</td>
         <td>
           <form method="POST" action="{{ url_for('admin.assign_design', did=d.id) }}" class="inline-form">
-            <select name="public_figure_id" onchange="this.form.submit()">
+            <select name="pf_id" onchange="this.form.submit()">
               <option value="">-- none --</option>
               {% for pf in pfs %}<option value="{{ pf.id }}" {{ 'selected' if d.assigned_public_figure_id==pf.id }}>{{ pf.full_name }}</option>{% endfor %}
             </select>
           </form>
         </td>
-        <td>{{ 'Yes' if d.active else 'No' }}</td>
-        <td><form method="POST" action="{{ url_for('admin.delete_design', did=d.id) }}" style="display:inline" onsubmit="return confirm('Delete?')"><button class="btn btn-ghost xs">Delete</button></form></td>
+        <td>
+          <form method="POST" action="{{ url_for('admin.toggle_design_active', did=d.id) }}" class="inline-form">
+            <button class="btn btn-ghost xs">{{ 'Yes - click to disable' if d.active else 'No - click to enable' }}</button>
+          </form>
+        </td>
+        <td>
+          <a href="{{ url_for('admin.design_editor', did=d.id) }}" class="btn btn-ghost xs">Edit Layout</a>
+          <form method="POST" action="{{ url_for('admin.delete_design', did=d.id) }}" style="display:inline" onsubmit="return confirm('Delete?')"><button class="btn btn-ghost xs">Delete</button></form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
