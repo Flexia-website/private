@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
