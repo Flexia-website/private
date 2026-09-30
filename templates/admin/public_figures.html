@@ -36,6 +36,7 @@
           <form method="POST" action="{{ url_for('admin.toggle_verified', pf_id=pf.id) }}" style="display:inline"><button class="btn btn-ghost xs">{{ 'Unverify' if pf.verified else 'Verify' }}</button></form>
           <form method="POST" action="{{ url_for('admin.downgrade_pf', user_id=pf.id) }}" style="display:inline" onsubmit="return confirm('Downgrade this public figure?')"><button class="btn btn-ghost xs">Downgrade</button></form>
           <form method="POST" action="{{ url_for('admin.toggle_user', uid=pf.id) }}" style="display:inline"><button class="btn btn-ghost xs">{{ 'Suspend' if pf.status=='active' else 'Activate' }}</button></form>
+          <form method="POST" action="{{ url_for('admin.delete_user', uid=pf.id) }}" style="display:inline" onsubmit="return confirm('Permanently delete {{ pf.full_name|e }}? This also removes their messages, calls and fan cards and cannot be undone.')"><button class="btn btn-ghost xs" style="color:#ef4444;">Delete</button></form>
         </td>
       </tr>
       {% endfor %}

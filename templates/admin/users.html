@@ -30,6 +30,7 @@
             <form method="POST" action="{{ url_for('admin.downgrade_pf', user_id=u.id) }}" style="display:inline" onsubmit="return confirm('Downgrade to normal user?')"><button class="btn btn-ghost xs">Downgrade</button></form>
           {% endif %}
           <form method="POST" action="{{ url_for('admin.toggle_user', uid=u.id) }}" style="display:inline"><button class="btn btn-ghost xs">{{ 'Suspend' if u.status=='active' else 'Activate' }}</button></form>
+          <form method="POST" action="{{ url_for('admin.delete_user', uid=u.id) }}" style="display:inline" onsubmit="return confirm('Permanently delete {{ u.full_name|e }}? This also removes their messages, calls and fan cards and cannot be undone.')"><button class="btn btn-ghost xs" style="color:#ef4444;">Delete</button></form>
           {% if u.role == 'user' %}
             <button class="btn btn-ghost xs" onclick="openAssign({{ u.id }}, '{{ u.full_name }}')">Assign</button>
             {% if u.assigned_public_figure_id %}

@@ -10,8 +10,10 @@ from flask_socketio import SocketIO, emit, join_room
 from werkzeug.utils import secure_filename
 import phonenumbers
 from config import Config
+from sqlalchemy import or_
 from models import (db, User, Connection, Message, Call, FanCard,
-                    FanCardDesign, VoiceEffect, VideoLibrary, Notification)
+                    FanCardDesign, VoiceEffect, VideoLibrary, Notification,
+                    LipSyncVideo, LipSyncSession)
 from database import init_db
 from auth import (current_user, login_required, admin_required,
                   public_figure_required, user_required)
@@ -724,6 +726,59 @@ def admin_toggle_user(uid):
     u.status = "suspended" if u.status == "active" else "active"
     db.session.commit()
     return jsonify({"ok": True, "status": u.status})
+
+
+@app.route("/admin/users/<int:uid>/delete", methods=["POST"], endpoint="admin.delete_user")
+@admin_required
+def admin_delete_user(uid):
+    """Permanently delete a user (or public figure) and everything tied to them."""
+    me = current_user()
+    u = User.query.get_or_404(uid)
+    back = request.referrer or url_for("admin.users_list")
+
+    if u.id == me.id or u.role == "admin":
+        flash("Admin accounts can't be deleted.", "error")
+        return redirect(back)
+
+    name = u.full_name
+    photo = u.profile_photo
+    try:
+        # Lip-sync data: sessions by this user, plus this account's videos and their sessions
+        video_ids = [v.id for v in LipSyncVideo.query.filter_by(public_figure_id=uid).all()]
+        LipSyncSession.query.filter_by(user_id=uid).delete(synchronize_session=False)
+        if video_ids:
+            LipSyncSession.query.filter(LipSyncSession.video_id.in_(video_ids)).delete(synchronize_session=False)
+        LipSyncVideo.query.filter_by(public_figure_id=uid).delete(synchronize_session=False)
+
+        # Rows that belong to this user
+        Message.query.filter(or_(Message.sender_id == uid, Message.receiver_id == uid)).delete(synchronize_session=False)
+        Call.query.filter(or_(Call.caller_id == uid, Call.receiver_id == uid)).delete(synchronize_session=False)
+        FanCard.query.filter(or_(FanCard.user_id == uid, FanCard.public_figure_id == uid)).delete(synchronize_session=False)
+        Connection.query.filter(or_(Connection.user_id == uid, Connection.public_figure_id == uid)).delete(synchronize_session=False)
+        Notification.query.filter_by(user_id=uid).delete(synchronize_session=False)
+
+        # Nullable references from other rows: detach instead of deleting
+        Connection.query.filter_by(assigned_by=uid).update({"assigned_by": None}, synchronize_session=False)
+        User.query.filter_by(assigned_public_figure_id=uid).update({"assigned_public_figure_id": None}, synchronize_session=False)
+        FanCardDesign.query.filter_by(assigned_public_figure_id=uid).update({"assigned_public_figure_id": None}, synchronize_session=False)
+
+        db.session.delete(u)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print("[ADMIN] delete_user failed:", e)
+        flash("Could not delete user. Nothing was changed.", "error")
+        return redirect(back)
+
+    # Best-effort cleanup of the profile photo file (only inside the uploads folder)
+    if photo and photo.startswith("/static/uploads/"):
+        try:
+            os.remove(os.path.join(app.config["UPLOAD_FOLDER"], os.path.basename(photo)))
+        except OSError:
+            pass
+
+    flash("%s was deleted." % name, "success")
+    return redirect(back)
 
 
 @app.route("/admin/public-figures/<int:pf_id>/toggle-verified", methods=["POST"], endpoint="admin.toggle_verified")
