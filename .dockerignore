@@ -1,6 +1,13 @@
 __pycache__
 *.pyc
+*.pyo
 .git
+.gitignore
 .env
-instance/
+.venv
+venv/
+instance/*.db
 static/uploads/*
+!static/uploads/.gitkeep
+*.log
+.DS_Store
