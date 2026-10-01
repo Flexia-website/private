@@ -7,6 +7,13 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}">
+<link rel="manifest" href="{{ url_for('pwa.manifest') }}">
+<meta name="theme-color" content="#04070d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Private Chat">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
 {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -32,13 +39,17 @@
   </div>
 </div>
 <div id="globalCallModal" class="modal hidden">
-  <div class="modal-content glass">
-    <div class="pf-avatar-lg" id="gcmAvatarWrap"></div>
-    <h3 id="gcmName"></h3>
-    <p id="gcmStatus" class="muted">Connecting...</p>
+  <div class="modal-content">
+    <!-- Full-screen video background -->
     <video id="gcmRemoteVideo" autoplay playsinline disablePictureInPicture disableRemotePlayback controlsList="nodownload noplaybackrate nofullscreen" oncontextmenu="return false" tabindex="-1" class="hidden video-call"></video>
+    <!-- Avatar & name overlay (shown when no video) -->
+    <div class="pf-avatar-lg" id="gcmAvatarWrap" style="position:absolute;top:28px;left:50%;transform:translateX(-50%);z-index:10;"></div>
+    <h3 id="gcmName" style="position:absolute;top:110px;left:0;right:0;text-align:center;z-index:10;text-shadow:0 2px 8px rgba(0,0,0,0.8);"></h3>
+    <p id="gcmStatus" class="muted" style="position:absolute;top:142px;left:0;right:0;text-align:center;z-index:10;text-shadow:0 1px 4px rgba(0,0,0,0.8);"></p>
+    <!-- PiP local video -->
     <video id="gcmLocalVideo" autoplay muted class="hidden self-video"></video>
-    <div id="gcmIncomingVideoChoice" class="hidden incoming-choice">
+    <!-- Choice buttons when video call comes in -->
+    <div id="gcmIncomingVideoChoice" class="hidden incoming-choice" style="position:absolute;bottom:110px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 24px;z-index:20;">
       <button class="btn btn-primary glow" onclick="GlobalCall.answerWithPremade()">
         <i class="fa-solid fa-video"></i> Answer with Video Response
       </button>
@@ -49,7 +60,8 @@
         <i class="fa-solid fa-phone-slash"></i> Decline
       </button>
     </div>
-    <div id="gcmActiveControls" class="call-controls hidden">
+    <!-- Active call controls floating at bottom -->
+    <div id="gcmActiveControls" class="call-controls hidden" style="position:absolute;bottom:36px;left:0;right:0;justify-content:center;z-index:20;padding-bottom:env(safe-area-inset-bottom);">
       <button class="icon-btn" onclick="GlobalCall.toggleMute()"><i class="fa-solid fa-microphone" id="gcmMuteIcon"></i></button>
       <button class="icon-btn" onclick="GlobalCall.toggleSpeaker()"><i class="fa-solid fa-volume-high"></i></button>
       <button class="icon-btn danger" onclick="GlobalCall.end()"><i class="fa-solid fa-phone-slash"></i></button>
@@ -65,6 +77,7 @@
 {% endif %}
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/pwa.js') }}"></script>
 {% block scripts %}{% endblock %}
 
 {% macro verified_badge(size='') -%}

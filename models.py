@@ -29,6 +29,8 @@ class User(db.Model):
     likes_count = db.Column(db.BigInteger, default=0)
     assigned_fan_card_design_id = db.Column(db.Integer, db.ForeignKey("fan_card_designs.id"), nullable=True)
     call_video_url = db.Column(db.String(255), default="")  # premade looping video for public figures to use when answering calls
+    mouth_x = db.Column(db.Float, nullable=True)  # relative X position of mouth in call video (0–1)
+    mouth_y = db.Column(db.Float, nullable=True)  # relative Y position of mouth in call video (0–1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, pw):

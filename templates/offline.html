@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04070d">
+<title>PRIVATE CHAT</title>
+<style>
+/* Fully self-contained: no external fonts, icons or scripts, so it renders with no network. */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--blue:#2b7fff;--cyan:#22d3ee;--txt:#eaf2ff;--muted:#8ea0bd}
+html,body{height:100%;background:#04070d;color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  background:radial-gradient(900px 600px at 50% 0%,#0d1e3d 0%,#04070d 62%)}
+
+/* ---------- Sparkle sky ---------- */
+.sky{position:fixed;inset:0;pointer-events:none}
+.sky i{position:absolute;width:2px;height:2px;border-radius:50%;background:#9cc4ff;opacity:0;animation:twinkle var(--d) ease-in-out var(--l) infinite}
+@keyframes twinkle{0%,100%{opacity:0;transform:scale(.5)}50%{opacity:.9;transform:scale(1.6)}}
+
+/* ---------- Stage ---------- */
+.stage{position:relative;width:min(100%,460px);height:330px;perspective:900px;margin-bottom:6px}
+.beam{position:absolute;top:-40px;width:150px;height:380px;transform-origin:50% 0;
+  background:linear-gradient(180deg,rgba(120,180,255,.30),rgba(120,180,255,0) 85%);
+  clip-path:polygon(42% 0,58% 0,100% 100%,0 100%);filter:blur(3px);opacity:.75}
+.beam.a{left:8%;animation:sweepA 6s ease-in-out infinite}
+.beam.b{right:8%;animation:sweepB 7s ease-in-out infinite}
+@keyframes sweepA{0%,100%{transform:rotate(-16deg)}50%{transform:rotate(14deg)}}
+@keyframes sweepB{0%,100%{transform:rotate(15deg)}50%{transform:rotate(-13deg)}}
+.floor{position:absolute;left:50%;bottom:6px;width:82%;height:38px;transform:translateX(-50%);
+  background:radial-gradient(closest-side,rgba(43,127,255,.55),rgba(43,127,255,0));filter:blur(6px);animation:pulse 3.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+
+/* ---------- Public figure cards ---------- */
+.card{position:absolute;left:50%;top:22px;width:150px;height:210px;margin-left:-75px;border-radius:20px;
+  background:linear-gradient(165deg,rgba(24,38,70,.9),rgba(8,12,24,.92));
+  border:1px solid rgba(120,180,255,.22);box-shadow:0 18px 40px rgba(0,0,0,.55);
+  display:flex;flex-direction:column;align-items:center;padding-top:20px;
+  transform:translateX(calc(var(--o) * 112px)) translateZ(calc(var(--z) * -1px)) rotateY(calc(var(--o) * -22deg)) scale(calc(1 - var(--a) * .14));
+  opacity:calc(1 - var(--a) * .38);transition:transform .9s cubic-bezier(.2,.8,.2,1),opacity .9s,box-shadow .9s,border-color .9s;z-index:calc(10 - var(--a))}
+.card.active{border-color:rgba(34,211,238,.7);box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 46px rgba(43,127,255,.55),0 22px 46px rgba(0,0,0,.6)}
+.avatar{position:relative;width:96px;height:96px;border-radius:50%;overflow:hidden;background:linear-gradient(160deg,hsl(var(--h) 85% 62%),hsl(calc(var(--h) + 50) 80% 38%));
+  box-shadow:0 0 0 3px rgba(255,255,255,.08)}
+.avatar .head{position:absolute;left:50%;top:20px;width:34px;height:34px;margin-left:-17px;border-radius:50%;background:rgba(4,7,13,.78)}
+.avatar .body{position:absolute;left:50%;bottom:-24px;width:74px;height:58px;margin-left:-37px;border-radius:50% 50% 0 0;background:rgba(4,7,13,.78)}
+.role{margin-top:12px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:5px}
+.handle{font-size:11px;color:var(--muted);margin-top:2px}
+.badge{width:16px;height:16px;transform:scale(0);filter:drop-shadow(0 0 4px rgba(10,132,255,.8))}
+.card.active .badge{animation:pop .7s .35s cubic-bezier(.3,1.7,.5,1) forwards}
+@keyframes pop{0%{transform:scale(0) rotate(-40deg)}100%{transform:scale(1) rotate(0)}}
+.ring{position:absolute;left:50%;top:14px;width:108px;height:108px;margin-left:-54px;border-radius:50%;border:2px solid var(--cyan);opacity:0;pointer-events:none}
+.card.active .ring{animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}
+
+/* ---------- Camera flash ---------- */
+.flash{position:absolute;left:50%;top:70px;width:220px;height:220px;margin:-110px 0 0 -110px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(255,255,255,.95),rgba(180,215,255,.35) 45%,rgba(255,255,255,0));opacity:0;z-index:30}
+.flash.go{animation:flash .55s ease-out}
+@keyframes flash{0%{opacity:0;transform:scale(.4)}20%{opacity:1}100%{opacity:0;transform:scale(1.4)}}
+
+/* ---------- Floating hearts ---------- */
+.hearts{position:absolute;inset:0;pointer-events:none;z-index:25;overflow:hidden}
+.heart{position:absolute;bottom:40px;width:14px;height:14px;background:#ff4d7a;transform:rotate(-45deg);opacity:0;animation:rise var(--t) ease-out forwards}
+.heart:before,.heart:after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:#ff4d7a}
+.heart:before{top:-7px;left:0}.heart:after{left:7px;top:0}
+@keyframes rise{0%{opacity:0;transform:translate(0,0) rotate(-45deg) scale(.5)}15%{opacity:.95}100%{opacity:0;transform:translate(var(--x),-230px) rotate(-45deg) scale(1.1)}}
+
+/* ---------- Stats ---------- */
+.stats{display:flex;gap:26px;margin-top:2px}
+.stat{text-align:center;min-width:92px}
+.stat b{display:block;font-size:24px;letter-spacing:.5px;font-variant-numeric:tabular-nums;
+  background:linear-gradient(90deg,#60a5fa,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat span{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- Copy + status ---------- */
+h1{margin-top:22px;font-size:20px;letter-spacing:4px;text-align:center;font-weight:700;
+  background:linear-gradient(90deg,#60a5fa,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tag{margin-top:6px;font-size:13px;color:var(--muted);text-align:center;max-width:320px}
+.pill{margin-top:18px;display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:12px;
+  color:var(--muted);border:1px solid rgba(120,180,255,.18);background:rgba(255,255,255,.04)}
+.pill i{width:7px;height:7px;border-radius:50%;background:#f59e0b;animation:blink 1.4s ease-in-out infinite}
+.pill.back i{background:#22c55e;animation:none}
+@keyframes blink{50%{opacity:.25}}
+button{margin-top:12px;padding:11px 26px;border:0;border-radius:12px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;
+  background:linear-gradient(90deg,var(--blue),var(--cyan));box-shadow:0 0 24px rgba(43,127,255,.45)}
+button:active{transform:scale(.97)}
+
+@media (max-width:380px){.card{width:132px;height:190px;margin-left:-66px}.avatar{width:84px;height:84px}}
+@media (prefers-reduced-motion:reduce){
+  .beam,.floor,.sky i,.ring,.pill i{animation:none!important}
+  .card{transition:none}
+  .hearts,.flash{display:none}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="vbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fa9ff"/><stop offset="1" stop-color="#0a84ff"/></linearGradient>
+    <symbol id="verified" viewBox="0 0 48 48">
+      <path fill="url(#vbg)" d="M24 2.6l4.9 3.6 6-.8 2.6 5.5 5.5 2.6-.8 6 3.6 4.9-3.6 4.9.8 6-5.5 2.6-2.6 5.5-6-.8-4.9 3.6-4.9-3.6-6 .8-2.6-5.5-5.5-2.6.8-6L2.6 24l3.6-4.9-.8-6 5.5-2.6 2.6-5.5 6 .8L24 2.6z"/>
+      <path fill="#fff" d="M20.5 30.6l-5.1-5.1 2.1-2.1 3 3 8.1-8.1 2.1 2.1-10.2 10.2z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="sky" id="sky"></div>
+
+<div class="stage" id="stage" aria-hidden="true">
+  <div class="beam a"></div>
+  <div class="beam b"></div>
+  <div class="floor"></div>
+  <div class="hearts" id="hearts"></div>
+  <div class="flash" id="flash"></div>
+</div>
+
+<div class="stats" aria-hidden="true">
+  <div class="stat"><b id="followers">0</b><span>Followers</span></div>
+  <div class="stat"><b id="likes">0</b><span>Likes</span></div>
+</div>
+
+<h1>YOUR STARS</h1>
+<p class="tag">Your favorite public figures are one connection away.</p>
+
+<div class="pill" id="status"><i></i><span id="statusText">You're offline</span></div>
+<button id="retry" type="button">Try again</button>
+
+<script>
+(function () {
+  var FIGURES = [
+    { role: "Singer",    handle: "@stagevoice",  hue: 285, followers: 48200000, likes: 391000000 },
+    { role: "Actor",     handle: "@onscreen",    hue: 205, followers: 31700000, likes: 204000000 },
+    { role: "Athlete",   handle: "@goldenmoment",hue: 150, followers: 27400000, likes: 158000000 },
+    { role: "Creator",   handle: "@dailydrop",   hue: 340, followers: 19800000, likes: 262000000 },
+    { role: "Presenter", handle: "@primetime",   hue: 35,  followers: 12600000, likes: 77000000 }
+  ];
+  var n = FIGURES.length, active = 0;
+  var stage = document.getElementById("stage");
+  var hearts = document.getElementById("hearts");
+  var flash = document.getElementById("flash");
+  var fEl = document.getElementById("followers");
+  var lEl = document.getElementById("likes");
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Twinkling sky
+  var sky = document.getElementById("sky");
+  for (var s = 0; s < 40; s++) {
+    var st = document.createElement("i");
+    st.style.left = Math.random() * 100 + "%";
+    st.style.top = Math.random() * 100 + "%";
+    st.style.setProperty("--d", (2 + Math.random() * 3).toFixed(2) + "s");
+    st.style.setProperty("--l", (Math.random() * 4).toFixed(2) + "s");
+    sky.appendChild(st);
+  }
+
+  // Build the cards
+  var cards = FIGURES.map(function (f) {
+    var c = document.createElement("div");
+    c.className = "card";
+    c.style.setProperty("--h", f.hue);
+    c.innerHTML =
+      '<div class="ring"></div>' +
+      '<div class="avatar"><span class="head"></span><span class="body"></span></div>' +
+      '<div class="role">' + f.role + '<svg class="badge"><use href="#verified"/></svg></div>' +
+      '<div class="handle">' + f.handle + '</div>';
+    stage.insertBefore(c, stage.querySelector(".hearts"));
+    return c;
+  });
+
+  function humanize(v) {
+    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+    if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+    return String(Math.round(v));
+  }
+
+  var shown = { f: 0, l: 0 };
+  function countTo(target) {
+    var from = { f: shown.f, l: shown.l }, start = null, dur = 1400;
+    function step(ts) {
+      if (start === null) start = ts;
+      var p = Math.min((ts - start) / dur, 1), e = 1 - Math.pow(1 - p, 3);
+      shown.f = from.f + (target.followers - from.f) * e;
+      shown.l = from.l + (target.likes - from.l) * e;
+      fEl.textContent = humanize(shown.f);
+      lEl.textContent = humanize(shown.l);
+      if (p < 1) requestAnimationFrame(step);
+    }
+    if (reduce) { shown.f = target.followers; shown.l = target.likes; fEl.textContent = humanize(shown.f); lEl.textContent = humanize(shown.l); return; }
+    requestAnimationFrame(step);
+  }
+
+  function layout() {
+    cards.forEach(function (c, i) {
+      var o = ((i - active + n + 2) % n) - 2;      // -2 .. 2
+      var a = Math.abs(o);
+      c.style.setProperty("--o", o);
+      c.style.setProperty("--a", a);
+      c.style.setProperty("--z", a * 60);
+      c.classList.toggle("active", o === 0);
+      c.style.visibility = a > 2 ? "hidden" : "visible";
+    });
+  }
+
+  function fireFlash() {
+    if (reduce) return;
+    flash.classList.remove("go");
+    void flash.offsetWidth;
+    flash.classList.add("go");
+  }
+
+  function next() {
+    active = (active + 1) % n;
+    layout();
+    countTo(FIGURES[active]);
+    setTimeout(fireFlash, 450);
+  }
+
+  function spawnHeart() {
+    if (reduce) return;
+    var h = document.createElement("div");
+    h.className = "heart";
+    h.style.left = (38 + Math.random() * 24) + "%";
+    h.style.setProperty("--x", (Math.random() * 110 - 55).toFixed(0) + "px");
+    h.style.setProperty("--t", (2.2 + Math.random() * 1.6).toFixed(2) + "s");
+    h.style.background = ["#ff4d7a", "#ff7a59", "#c084fc", "#60a5fa"][Math.floor(Math.random() * 4)];
+    hearts.appendChild(h);
+    setTimeout(function () { h.remove(); }, 4000);
+  }
+
+  layout();
+  countTo(FIGURES[0]);
+  setTimeout(fireFlash, 700);
+  setInterval(next, 3600);
+  setInterval(spawnHeart, 420);
+
+  // Reconnect handling
+  var pill = document.getElementById("status");
+  var txt = document.getElementById("statusText");
+  var retry = document.getElementById("retry");
+  var going = false;
+  function goBack() {
+    if (going) return;
+    going = true;
+    pill.classList.add("back");
+    txt.textContent = "Back online";
+    // The service worker serves this page at the URL the user asked for, so a reload retries it.
+    setTimeout(function () { location.reload(); }, 500);
+  }
+  window.addEventListener("online", goBack);
+  retry.addEventListener("click", function () {
+    txt.textContent = "Checking…";
+    fetch("/ping?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (r.ok) goBack(); else throw 0; })
+      .catch(function () { txt.textContent = "Still offline"; setTimeout(function () { txt.textContent = "You're offline"; }, 1800); });
+  });
+})();
+</script>
+</body>
+</html>

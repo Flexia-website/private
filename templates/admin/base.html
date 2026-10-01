@@ -8,6 +8,13 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}">
+<link rel="manifest" href="{{ url_for('pwa.manifest') }}">
+<meta name="theme-color" content="#04070d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Private Chat">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
 {% block head %}{% endblock %}
 </head>
 <body class="admin-bg">
@@ -53,6 +60,7 @@
   </main>
 </div>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/pwa.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

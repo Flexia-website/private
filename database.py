@@ -19,6 +19,12 @@ def migrate_columns():
             db.session.commit()
             print("[BOOT] Migrated: added users.call_video_url")
 
+        for col in ("mouth_x", "mouth_y"):
+            if col not in existing_cols:
+                db.session.execute(text("ALTER TABLE users ADD COLUMN %s FLOAT" % col))
+                db.session.commit()
+                print("[BOOT] Migrated: added users.%s" % col)
+
         call_cols = {c["name"] for c in inspector.get_columns("calls")}
         if "status" not in call_cols:
             db.session.execute(text("ALTER TABLE calls ADD COLUMN status VARCHAR(20) DEFAULT 'ringing'"))

@@ -2,14 +2,23 @@ import os
 import json
 import random
 import base64
+import io
+import re
+import urllib.request
+from urllib.parse import urlparse, unquote
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 from flask import (Flask, render_template, request, redirect, url_for,
-                   session, flash, jsonify)
+                   session, flash, jsonify, send_from_directory)
 from flask_socketio import SocketIO, emit, join_room
 from werkzeug.utils import secure_filename
 import phonenumbers
 from config import Config
+try:
+    import cloudinary
+    import cloudinary.uploader
+except ImportError:  # package not installed -> local disk storage
+    cloudinary = None
 from sqlalchemy import or_
 from models import (db, User, Connection, Message, Call, FanCard,
                     FanCardDesign, VoiceEffect, VideoLibrary, Notification,
@@ -63,15 +72,114 @@ def generate_card_expiry_and_code():
     return expiry, code
 
 
-def save_upload(file, kinds=("image",)):
-    if not file or file.filename == "":
-        return ""
-    if not allowed_file(file.filename, kinds):
+# ---------------- Media storage (Cloudinary, with local-disk fallback) ----------------
+def _setup_cloudinary():
+    if cloudinary is None:
+        return False
+    name = key = secret = None
+    url = app.config.get("CLOUDINARY_URL")
+    if url:
+        p = urlparse(url)
+        if p.scheme == "cloudinary":
+            name = p.netloc.rsplit("@", 1)[-1]
+            key, secret = p.username, p.password
+    name = name or app.config.get("CLOUDINARY_CLOUD_NAME")
+    key = key or app.config.get("CLOUDINARY_API_KEY")
+    secret = secret or app.config.get("CLOUDINARY_API_SECRET")
+    if not (name and key and secret):
+        return False
+    cloudinary.config(cloud_name=name, api_key=key, api_secret=secret, secure=True)
+    return True
+
+
+USE_CLOUDINARY = _setup_cloudinary()
+print("[BOOT] Media storage:", "Cloudinary" if USE_CLOUDINARY else "local disk (static/uploads)")
+
+
+def save_local(file, kinds=("image",)):
+    """Save an uploaded file to the local uploads folder; returns its /static/uploads URL."""
+    if not file or file.filename == "" or not allowed_file(file.filename, kinds):
         return ""
     fname = "%d_%s" % (int(datetime.utcnow().timestamp()), secure_filename(file.filename))
-    path = os.path.join(app.config["UPLOAD_FOLDER"], fname)
-    file.save(path)
+    file.save(os.path.join(app.config["UPLOAD_FOLDER"], fname))
     return "/static/uploads/" + fname
+
+
+def save_upload(file, kinds=("image",)):
+    """Store an uploaded file and return its public URL ("" if rejected or failed)."""
+    if not USE_CLOUDINARY:
+        return save_local(file, kinds)
+    if not file or file.filename == "" or not allowed_file(file.filename, kinds):
+        return ""
+    try:
+        file.stream.seek(0)
+        res = cloudinary.uploader.upload(
+            file.stream, resource_type="auto",
+            folder=app.config["CLOUDINARY_FOLDER"], overwrite=False)
+        return res.get("secure_url", "")
+    except Exception as e:
+        print("[STORAGE] Cloudinary upload failed:", e)
+        return ""
+
+
+def publish_local_file(path):
+    """Publish a file generated on the server (fan card PNG, lip-sync video).
+    With Cloudinary the local copy is removed after upload. Returns the public URL or ""."""
+    if not os.path.exists(path):
+        return ""
+    if not USE_CLOUDINARY:
+        return "/static/uploads/" + os.path.basename(path)
+    try:
+        res = cloudinary.uploader.upload(
+            path, resource_type="auto",
+            folder=app.config["CLOUDINARY_FOLDER"], overwrite=False)
+        os.remove(path)
+        return res.get("secure_url", "")
+    except Exception as e:
+        print("[STORAGE] Cloudinary upload failed:", e)
+        return ""
+
+
+def open_media(ref):
+    """Open a stored media reference (Cloudinary URL or local /static/uploads path)
+    for reading. Returns a path/file-like object, or None if unavailable."""
+    if not ref:
+        return None
+    try:
+        if ref.startswith(("http://", "https://")):
+            host = urlparse(ref).hostname or ""
+            if not host.endswith("cloudinary.com"):
+                return None
+            with urllib.request.urlopen(ref, timeout=15) as r:
+                return io.BytesIO(r.read())
+        path = ref.lstrip("/")
+        return path if os.path.exists(path) else None
+    except Exception as e:
+        print("[STORAGE] Could not read media:", e)
+        return None
+
+
+_CLD_URL_RE = re.compile(r"^https?://res\.cloudinary\.com/[^/]+/(image|video|raw)/upload/(?:v\d+/)?(.+)$")
+
+
+def delete_media(ref):
+    """Best-effort removal of a stored file (Cloudinary asset or local upload)."""
+    if not ref:
+        return
+    try:
+        m = _CLD_URL_RE.match(ref)
+        if m:
+            if not USE_CLOUDINARY:
+                return
+            rtype, public_id = m.group(1), unquote(m.group(2))
+            last = public_id.rsplit("/", 1)[-1]
+            if rtype != "raw" and "." in last:
+                public_id = public_id.rsplit(".", 1)[0]
+            cloudinary.uploader.destroy(public_id, resource_type=rtype, invalidate=True)
+        elif ref.startswith("/static/uploads/"):
+            os.remove(os.path.join(app.config["UPLOAD_FOLDER"], os.path.basename(ref)))
+    except Exception as e:
+        print("[STORAGE] Could not delete media:", e)
 
 
 def generate_fan_card_png(design, card):
@@ -88,12 +196,12 @@ def generate_fan_card_png(design, card):
     if not fields:
         return ""
 
-    bg_path = design.preview.lstrip("/")
-    if not os.path.exists(bg_path):
+    bg_src = open_media(design.preview)
+    if not bg_src:
         return ""
 
     try:
-        base_img = Image.open(bg_path).convert("RGBA")
+        base_img = Image.open(bg_src).convert("RGBA")
         W, H = base_img.size
         draw = ImageDraw.Draw(base_img)
 
@@ -129,20 +237,20 @@ def generate_fan_card_png(design, card):
 
         photo_field = fields.get("photo")
         if photo_field and photo_field.get("enabled") and card.photo:
-            photo_path = card.photo.lstrip("/")
-            if os.path.exists(photo_path):
+            photo_src = open_media(card.photo)
+            if photo_src:
                 px = int(photo_field["x"] / 100 * W)
                 py = int(photo_field["y"] / 100 * H)
                 pw = int(photo_field["w"] / 100 * W)
                 ph = int(photo_field["h"] / 100 * H)
-                user_photo = Image.open(photo_path).convert("RGBA")
+                user_photo = Image.open(photo_src).convert("RGBA")
                 user_photo = user_photo.resize((max(1, pw), max(1, ph)))
                 base_img.paste(user_photo, (px, py), user_photo)
 
         out_name = "%d_fancard_%d.png" % (int(datetime.utcnow().timestamp()), card.id)
         out_path = os.path.join(app.config["UPLOAD_FOLDER"], out_name)
         base_img.convert("RGB").save(out_path, "PNG")
-        return "/static/uploads/" + out_name
+        return publish_local_file(out_path)
     except Exception as e:
         print("[FAN CARD] PNG generation failed:", e)
         return ""
@@ -213,6 +321,37 @@ def inject_globals():
 
 app.jinja_env.filters["humanize"] = humanize_count
 app.jinja_env.filters["from_json"] = lambda s: __import__("json").loads(s) if s else {}
+
+
+# ---------------- PWA ----------------
+@app.route("/manifest.webmanifest", endpoint="pwa.manifest")
+def pwa_manifest():
+    resp = send_from_directory(app.static_folder, "manifest.webmanifest",
+                               mimetype="application/manifest+json")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
+@app.route("/sw.js", endpoint="pwa.sw")
+def pwa_sw():
+    # Served from the site root so the worker can control every page.
+    resp = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
+
+@app.route("/offline", endpoint="pwa.offline")
+def pwa_offline():
+    # Public and user-independent: the service worker caches this page.
+    return render_template("offline.html")
+
+
+@app.route("/ping", endpoint="pwa.ping")
+def pwa_ping():
+    resp = app.response_class(status=204)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 # ---------------- Root ----------------
@@ -449,7 +588,8 @@ def user_chat_with_pf():
     ).order_by(Message.created_at.asc()).limit(500).all()
     Message.query.filter_by(sender_id=pf.id, receiver_id=u.id, read_status=False).update({"read_status": True})
     db.session.commit()
-    return render_template("user/chat.html", user=u, peer=pf, messages=msgs)
+    return render_template("user/chat.html", user=u, peer=pf, messages=msgs,
+                           peer_online=is_user_online(pf.id))
 
 
 @app.route("/user/calls", endpoint="user.calls")
@@ -634,8 +774,28 @@ def public_call_video():
 def public_call_video_remove():
     pf = current_user()
     pf.call_video_url = ""
+    pf.mouth_x = None
+    pf.mouth_y = None
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/public/call-video/mouth", methods=["POST"], endpoint="public.call_video_mouth")
+@public_figure_required
+def public_call_video_mouth():
+    pf = current_user()
+    data = request.get_json(silent=True) or {}
+    mx = data.get("mouth_x")
+    my = data.get("mouth_y")
+    if mx is None or my is None:
+        return jsonify({"ok": False, "error": "Missing coordinates"}), 400
+    try:
+        pf.mouth_x = float(mx)
+        pf.mouth_y = float(my)
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ---------------- Admin ----------------
@@ -741,7 +901,10 @@ def admin_delete_user(uid):
         return redirect(back)
 
     name = u.full_name
-    photo = u.profile_photo
+    # Files to remove from storage once the DB rows are gone
+    media_to_delete = [u.profile_photo, u.call_video_url]
+    media_to_delete += [m.media_url for m in Message.query.filter(
+        or_(Message.sender_id == uid, Message.receiver_id == uid)).all()]
     try:
         # Lip-sync data: sessions by this user, plus this account's videos and their sessions
         video_ids = [v.id for v in LipSyncVideo.query.filter_by(public_figure_id=uid).all()]
@@ -770,12 +933,9 @@ def admin_delete_user(uid):
         flash("Could not delete user. Nothing was changed.", "error")
         return redirect(back)
 
-    # Best-effort cleanup of the profile photo file (only inside the uploads folder)
-    if photo and photo.startswith("/static/uploads/"):
-        try:
-            os.remove(os.path.join(app.config["UPLOAD_FOLDER"], os.path.basename(photo)))
-        except OSError:
-            pass
+    # Best-effort cleanup of the user's files (Cloudinary assets or local uploads)
+    for ref in media_to_delete:
+        delete_media(ref)
 
     flash("%s was deleted." % name, "success")
     return redirect(back)
@@ -1224,11 +1384,75 @@ def upload_voice_note():
 
 
 # ---------------- Socket.IO ----------------
+# ---- Presence: who is actually connected right now ----
+# Single worker process (see Dockerfile), so in-memory tracking is enough.
+_online = {}            # user_id -> set of connected socket ids
+PRESENCE_GRACE = 4      # seconds; hides the brief reconnect when a page navigates
+
+
+def _presence_audience(uid):
+    """Users who should see this user's status: a fan sees their public figure,
+    a public figure sees their fans."""
+    u = User.query.get(uid)
+    if not u:
+        return []
+    if u.role == "public_figure":
+        return [r[0] for r in db.session.query(User.id).filter(User.assigned_public_figure_id == uid).all()]
+    return [u.assigned_public_figure_id] if u.assigned_public_figure_id else []
+
+
+def _broadcast_presence(uid, online):
+    for rid in _presence_audience(uid):
+        socketio.emit("presence", {"user_id": uid, "online": online}, room="user_%d" % rid)
+
+
+def _mark_online(uid, sid):
+    sids = _online.setdefault(uid, set())
+    was_online = bool(sids)
+    sids.add(sid)
+    if not was_online:
+        _broadcast_presence(uid, True)
+
+
+def _delayed_offline(uid):
+    socketio.sleep(PRESENCE_GRACE)
+    if uid not in _online:  # no new connection arrived during the grace period
+        with app.app_context():
+            _broadcast_presence(uid, False)
+
+
+def _mark_offline(uid, sid):
+    sids = _online.get(uid)
+    if not sids:
+        return
+    sids.discard(sid)
+    if not sids:
+        _online.pop(uid, None)
+        socketio.start_background_task(_delayed_offline, uid)
+
+
+def is_user_online(uid):
+    return bool(_online.get(uid))
+
+
+@socketio.on("presence:get")
+def on_presence_get(data):
+    uid = session.get("user_id")
+    target = (data or {}).get("id")
+    if not uid or not str(target).isdigit():
+        return {"online": False}
+    target = int(target)
+    if target not in _presence_audience(uid):
+        return {"online": False}
+    return {"online": is_user_online(target)}
+
+
 @socketio.on("connect")
 def on_connect():
     uid = session.get("user_id")
     if uid:
         join_room("user_%d" % uid)
+        _mark_online(uid, request.sid)
 
 
 @socketio.on("join")
@@ -1290,6 +1514,7 @@ def on_disconnect():
     uid = session.get("user_id")
     if not uid:
         return
+    _mark_offline(uid, request.sid)
     # Clean up any call this socket was part of that never got a proper end signal
     stale_keys = [k for k in _active_calls if uid in k]
     for k in stale_keys:
@@ -1339,6 +1564,9 @@ def call_answer(data):
         if pf and pf.is_public_figure and pf.call_video_url:
             payload["premade"] = True
             payload["video_url"] = pf.call_video_url
+            if pf.mouth_x is not None and pf.mouth_y is not None:
+                payload["mouth_x"] = pf.mouth_x
+                payload["mouth_y"] = pf.mouth_y
     emit("call:answer", payload, room="user_%d" % to_id)
 
 
@@ -1413,33 +1641,30 @@ def api_lip_sync_end():
     if not video_file:
         return jsonify({"ok": False, "error": "No video provided"}), 400
     
+    if not video_generator:
+        return jsonify({"ok": False, "error": "Lip sync processing is not available"}), 503
+
+    src_path = output_path = None
     try:
-        # Save original video
-        video_path = save_upload(video_file, ("video",))
-        if not video_path:
+        # The video processor needs real files on disk, so work locally and publish the result.
+        src_url = save_local(video_file, ("video",))
+        if not src_url:
             return jsonify({"ok": False, "error": "Failed to save video"}), 400
-        
-        # Process with lip sync
+        src_path = os.path.join(app.config["UPLOAD_FOLDER"], os.path.basename(src_url))
+
         recorder = lip_sync_sessions[session_id]
         stats = recorder.get_session_stats()
-        
-        # Generate output path
+
         timestamp = int(datetime.utcnow().timestamp())
-        output_filename = f"{timestamp}_lipsync_output.mp4"
-        output_path = os.path.join(app.config["UPLOAD_FOLDER"], output_filename)
-        output_url = "/static/uploads/" + output_filename
-        
-        # Process video with lip sync
-        if video_generator:
-            video_generator.process_video_with_realtime_data(
-                os.path.join("static", video_path.lstrip("/")),
-                recorder.frames,
-                output_path
-            )
-        
-        # Clean up session
+        output_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{timestamp}_lipsync_output.mp4")
+        video_generator.process_video_with_realtime_data(src_path, recorder.frames, output_path)
+
         del lip_sync_sessions[session_id]
-        
+
+        output_url = publish_local_file(output_path)
+        if not output_url:
+            return jsonify({"ok": False, "error": "Could not store the generated video"}), 500
+
         return jsonify({
             "ok": True,
             "video_url": output_url,
@@ -1448,6 +1673,13 @@ def api_lip_sync_end():
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        for tmp in (src_path, output_path):
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
 
 
 @app.route("/api/lip-sync/frame", methods=["POST"], endpoint="api.lip_sync_frame")

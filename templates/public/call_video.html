@@ -18,6 +18,30 @@
             <video src="{{ pf.call_video_url }}" controls loop muted style="width:100%;max-height:320px;border-radius:14px;"></video>
           </div>
           <p class="tiny muted" style="margin-top:8px;"><i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Active — this plays for fans when you accept a video call.</p>
+
+          <!-- Mouth Mapping Tool -->
+          <div id="mouthMapSection" style="margin-top:18px;background:rgba(43,127,255,0.07);border:1px solid rgba(43,127,255,0.2);border-radius:12px;padding:14px;">
+            <p style="font-weight:600;margin-bottom:4px;"><i class="fa-solid fa-face-smile" style="color:#2b7fff;margin-right:6px;"></i>Mouth Position Mapping</p>
+            <p class="tiny muted" style="margin-bottom:12px;">Tap your mouth in the video frame below so lip sync works accurately.</p>
+            <div style="position:relative;display:block;width:100%;cursor:crosshair;" id="mouthMapWrap">
+              <video id="mouthMapVideo" src="{{ pf.call_video_url }}" muted style="width:100%;border-radius:10px;display:block;" preload="metadata"></video>
+              <div id="mouthDot" style="display:none;position:absolute;width:24px;height:14px;background:rgba(43,127,255,0.9);border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 12px rgba(43,127,255,0.8);"></div>
+              <div id="mouthOverlayHint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);border-radius:10px;pointer-events:none;">
+                <div style="text-align:center;color:#fff;">
+                  <i class="fa-solid fa-hand-pointer" style="font-size:24px;margin-bottom:6px;opacity:0.9;"></i>
+                  <p class="tiny">Tap your mouth in the video</p>
+                </div>
+              </div>
+            </div>
+            <div id="mouthMapStatus" class="tiny" style="margin-top:8px;color:var(--muted);">
+              {% if pf.mouth_x is not none %}
+                <i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Mouth mapped — tap to update position
+              {% else %}
+                Tap your mouth in the video to enable accurate lip sync
+              {% endif %}
+            </div>
+            <div id="mouthSaveStatus" class="tiny" style="margin-top:4px;"></div>
+          </div>
         {% else %}
           <div class="photo-upload-field" style="padding:26px;">
             <div class="thumb" style="width:48px;height:48px;"><i class="fa-solid fa-film"></i></div>
@@ -76,5 +100,64 @@ async function removeCallVideo() {
   const d = await r.json();
   if (d.ok) window.location.reload();
 }
+
+// Mouth mapping
+(function() {
+  const wrap = document.getElementById('mouthMapWrap');
+  const dot = document.getElementById('mouthDot');
+  const hint = document.getElementById('mouthOverlayHint');
+  const saveStatus = document.getElementById('mouthSaveStatus');
+  const mapStatus = document.getElementById('mouthMapStatus');
+  if (!wrap) return;
+
+  {% if pf.mouth_x is not none %}
+  // Restore previously saved dot position
+  const vid = document.getElementById('mouthMapVideo');
+  vid.addEventListener('loadedmetadata', () => {
+    const rx = {{ pf.mouth_x }} * 100;
+    const ry = {{ pf.mouth_y }} * 100;
+    dot.style.left = rx + '%';
+    dot.style.top = ry + '%';
+    dot.style.display = 'block';
+    if (hint) hint.style.display = 'none';
+  });
+  {% endif %}
+
+  async function saveMouthPos(rx, ry) {
+    saveStatus.textContent = 'Saving...'; saveStatus.style.color = '#9ca3af';
+    try {
+      const r = await fetch('{{ url_for("public.call_video_mouth") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mouth_x: rx, mouth_y: ry})
+      });
+      const d = await r.json();
+      if (d.ok) {
+        saveStatus.textContent = '✓ Position saved'; saveStatus.style.color = '#86efac';
+        mapStatus.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Mouth mapped — tap to update position';
+      } else {
+        saveStatus.textContent = d.error || 'Save failed'; saveStatus.style.color = '#fca5a5';
+      }
+    } catch(e) {
+      saveStatus.textContent = 'Save failed'; saveStatus.style.color = '#fca5a5';
+    }
+  }
+
+  function handleClick(e) {
+    const rect = wrap.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    const rx = cx / rect.width;
+    const ry = cy / rect.height;
+    dot.style.left = (rx * 100) + '%';
+    dot.style.top = (ry * 100) + '%';
+    dot.style.display = 'block';
+    if (hint) hint.style.display = 'none';
+    saveMouthPos(rx, ry);
+  }
+
+  wrap.addEventListener('click', handleClick);
+  wrap.addEventListener('touchend', function(e) { e.preventDefault(); handleClick(e); }, {passive:false});
+})();
 </script>
 {% endblock %}

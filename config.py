@@ -14,4 +14,12 @@ class Config:
     ADMIN_NAME = os.getenv("ADMIN_NAME", "System Administrator")
     ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
     ALLOWED_VIDEO_EXT = {"mp4", "webm", "mov", "avi", "mkv"}
-    ALLOWED_AUDIO_EXT = {"mp3", "wav", "m4a", "aac", "ogg", "flac"}
+    ALLOWED_AUDIO_EXT = {"mp3", "wav", "m4a", "aac", "ogg", "flac", "webm", "opus"}
+
+    # Cloudinary media storage. Set CLOUDINARY_URL (cloudinary://KEY:SECRET@CLOUD_NAME)
+    # or the three separate values. If none are set, uploads stay on local disk.
+    CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
+    CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+    CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+    CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+    CLOUDINARY_FOLDER = os.getenv("CLOUDINARY_FOLDER", "private-chat")

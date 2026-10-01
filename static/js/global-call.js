@@ -194,6 +194,18 @@
       rv.src = d.video_url;
       rv.loop = true;
       rv.muted = true;
+
+      // If the PF mapped their mouth position, pan the video so it's centred
+      if (d.mouth_x != null && d.mouth_y != null) {
+        // object-position lets us shift the cover crop so the face is centred
+        // mouth_x/mouth_y are 0–1 fractions; CSS object-position wants %
+        const px = Math.round(d.mouth_x * 100);
+        const py = Math.round(d.mouth_y * 100);
+        rv.style.objectPosition = px + '% ' + py + '%';
+      } else {
+        rv.style.objectPosition = '50% 30%'; // default: upper-centre (face area)
+      }
+
       rv.play().catch(() => {});
       rv.classList.remove('hidden');
       rv.onpause = () => { if (premadeActive) rv.play().catch(() => {}); };
@@ -215,7 +227,7 @@
     pendingOffer = null;
     premadeActive = false;
     const rv = $('gcmRemoteVideo');
-    if (rv) { rv.pause(); rv.src = ''; rv.srcObject = null; rv.loop = false; rv.muted = false; rv.classList.add('hidden'); }
+    if (rv) { rv.pause(); rv.src = ''; rv.srcObject = null; rv.loop = false; rv.muted = false; rv.style.objectPosition = ''; rv.classList.add('hidden'); }
     const lv = $('gcmLocalVideo');
     if (lv) lv.classList.add('hidden');
     const ra = $('gcmRemoteAudio');

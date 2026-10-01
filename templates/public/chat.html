@@ -27,7 +27,7 @@
         {% elif m.message_type == 'video' and m.media_url %}<video src="{{ m.media_url }}" controls class="msg-media"></video>
         {% elif m.message_type == 'voice' and m.media_url %}
           <div class="voice-note">
-            <i class="fa-solid fa-microphone voice-note-icon"></i>
+            <div class="voice-note-icon"><i class="fa-solid fa-microphone"></i></div>
             <audio src="{{ m.media_url }}" controls></audio>
           </div>
         {% else %}<div class="msg-text">{{ m.message }}</div>{% endif %}
@@ -39,6 +39,16 @@
     <button class="icon-btn" onclick="document.getElementById('file').click()"><i class="fa-solid fa-plus"></i></button>
     <input type="file" id="file" hidden onchange="uploadFile(this)">
     <button class="icon-btn" id="voiceBtn" title="Record voice note" onclick="toggleVoiceRecording()"><i class="fa-solid fa-microphone"></i></button>
+    <!-- Recording live UI -->
+    <div id="voiceRecordingUI">
+      <div class="voice-rec-dot"></div>
+      <span class="voice-rec-timer" id="recTimer">0:00</span>
+      <div class="voice-waveform">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <button class="voice-rec-stop" onclick="stopVoiceRecording()" title="Stop & send"><i class="fa-solid fa-stop"></i></button>
+    </div>
     <input id="input" placeholder="Type a message" onkeydown="if(event.key==='Enter') sendMsg()">
     <button class="icon-btn primary" onclick="sendMsg()"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
@@ -58,6 +68,9 @@ function linkCardHtml(lp) {
     (lp.thumbnail ? '<img src="' + lp.thumbnail + '" class="link-preview-thumb">' : '<div class="link-preview-thumb link-preview-thumb-fallback"><i class="fa-brands ' + icon + '"></i></div>') +
     '<div class="link-preview-info"><i class="fa-brands ' + icon + ' link-preview-icon"></i><span>' + escapeHtml(lp.title || lp.url) + '</span></div></a>';
 }
+function voiceNoteHtml(src) {
+  return '<div class="voice-note"><div class="voice-note-icon"><i class="fa-solid fa-microphone"></i></div><audio src="' + src + '" controls></audio></div>';
+}
 function addMsg(m) {
   const div = document.createElement('div');
   div.className = 'msg ' + (m.sender_id == ME ? 'mine' : 'theirs');
@@ -67,7 +80,7 @@ function addMsg(m) {
   }
   else if (m.type === 'image' && m.media) div.innerHTML = '<img src="' + m.media + '" class="msg-media">';
   else if (m.type === 'video' && m.media) div.innerHTML = '<video src="' + m.media + '" controls class="msg-media"></video>';
-  else if (m.type === 'voice' && m.media) div.innerHTML = '<div class="voice-note"><i class="fa-solid fa-microphone voice-note-icon"></i><audio src="' + m.media + '" controls></audio></div>';
+  else if (m.type === 'voice' && m.media) div.innerHTML = voiceNoteHtml(m.media);
   else div.innerHTML = '<div class="msg-text">' + escapeHtml(m.message) + '</div>';
   div.innerHTML += '<div class="msg-meta">' + new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</div>';
   msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
@@ -101,10 +114,8 @@ async function uploadFile(el) {
   div.className = 'msg mine';
   div.innerHTML = '<div class="upload-preview">' +
       (isImage ? '<img src="' + previewUrl + '">' : '<video src="' + previewUrl + '" muted></video>') +
-      '<div class="upload-progress"><div class="spinner"></div></div>' +
-    '</div>';
+      '<div class="upload-progress"><div class="spinner"></div></div></div>';
   msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
-
   const fd = new FormData(); fd.append('file', f);
   try {
     const r = await fetch('{{ url_for("api.upload") }}', {method:'POST', body: fd});
@@ -123,36 +134,94 @@ async function uploadFile(el) {
   }
   el.value = '';
 }
-let mediaRecorder, audioChunks = [];
-async function toggleVoiceRecording() {
+
+// ── Voice recording ────────────────────────────────────────────────────
+let mediaRecorder, audioChunks = [], recTimerInterval;
+
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4'];
+  for (const t of types) { if (MediaRecorder.isTypeSupported(t)) return t; }
+  return '';
+}
+
+function setRecordingUI(active) {
   const btn = document.getElementById('voiceBtn');
+  const ui  = document.getElementById('voiceRecordingUI');
+  const inp = document.getElementById('input');
+  const send = document.querySelector('.composer .icon-btn.primary');
+  if (active) {
+    ui.classList.add('active');
+    inp.style.display = 'none';
+    send.style.display = 'none';
+    btn.classList.add('recording');
+  } else {
+    ui.classList.remove('active');
+    inp.style.display = '';
+    send.style.display = '';
+    btn.classList.remove('recording');
+    document.getElementById('recTimer').textContent = '0:00';
+  }
+}
+
+async function toggleVoiceRecording() {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    btn.style.color = '';
+    stopVoiceRecording();
   } else {
     audioChunks = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-      mediaRecorder = new MediaRecorder(stream);
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      const mimeType = getSupportedMimeType();
+      mediaRecorder = mimeType ? new MediaRecorder(stream, {mimeType}) : new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
       mediaRecorder.onstop = async () => {
-        const blob = new Blob(audioChunks, {type: 'audio/webm'});
-        const fd = new FormData();
-        fd.append('voice', blob, 'voice_' + Date.now() + '.webm');
-        fd.append('to', PEER);
-        const r = await fetch('{{ url_for("api.upload_voice_note") }}', {method: 'POST', body: fd});
-        const d = await r.json();
-        if (d.ok) {
-          const msg = {id: d.message_id, sender_id: ME, receiver_id: PEER, message: '', type: 'voice', media: d.media_url, created_at: d.created_at, read: false};
-          addMsg(msg);
-          socket.emit('message', {to: PEER, message: '', type: 'voice', media: d.media_url});
-        }
+        clearInterval(recTimerInterval);
+        setRecordingUI(false);
         stream.getTracks().forEach(t => t.stop());
+        if (!audioChunks.length) return;
+        const mType = mediaRecorder.mimeType || 'audio/webm';
+        const ext = mType.includes('ogg') ? 'ogg' : mType.includes('mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(audioChunks, {type: mType});
+        const fd = new FormData();
+        fd.append('voice', blob, 'voice_' + Date.now() + '.' + ext);
+        fd.append('to', PEER);
+        const localUrl = URL.createObjectURL(blob);
+        const tmpDiv = document.createElement('div');
+        tmpDiv.className = 'msg mine';
+        tmpDiv.innerHTML = voiceNoteHtml(localUrl) + '<div class="msg-meta">Sending...</div>';
+        msgs.appendChild(tmpDiv); msgs.scrollTop = msgs.scrollHeight;
+        try {
+          const r = await fetch('{{ url_for("api.upload_voice_note") }}', {method: 'POST', body: fd});
+          const d = await r.json();
+          if (d.ok) {
+            tmpDiv.remove();
+            const msg = {sender_id: ME, receiver_id: PEER, message: '', type: 'voice', media: d.media_url, created_at: d.created_at};
+            addMsg(msg);
+            socket.emit('message', {to: PEER, message: '', type: 'voice', media: d.media_url});
+          } else {
+            tmpDiv.querySelector('.msg-meta').textContent = '⚠ Failed — ' + (d.error || 'upload error');
+          }
+        } catch(e) { tmpDiv.querySelector('.msg-meta').textContent = '⚠ Failed'; }
       };
-      mediaRecorder.start();
-      btn.style.color = '#ef4444';
-    } catch(e) { console.error('Microphone access denied:', e); }
+
+      mediaRecorder.start(100);
+      setRecordingUI(true);
+      let secs = 0;
+      recTimerInterval = setInterval(() => {
+        secs++;
+        const m = Math.floor(secs/60), s = secs%60;
+        document.getElementById('recTimer').textContent = m + ':' + String(s).padStart(2,'0');
+        if (secs >= 120) stopVoiceRecording();
+      }, 1000);
+    } catch(e) {
+      console.error('Mic access denied:', e);
+      alert('Microphone access is required to record voice notes.');
+    }
   }
+}
+
+function stopVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
 }
 </script>
 {% endblock %}
