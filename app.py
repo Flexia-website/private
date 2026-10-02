@@ -4,6 +4,7 @@ import random
 import base64
 import io
 import re
+import threading
 import urllib.request
 from urllib.parse import urlparse, unquote
 from datetime import datetime
@@ -782,6 +783,57 @@ def public_profile():
     return render_template("public/profile.html", pf=pf)
 
 
+
+# In-memory store for face-analysis background job status
+# { user_id: { 'status': 'running'|'done'|'error', 'summary': str,
+#              'mouth_x': float|None, 'mouth_y': float|None } }
+_face_analysis_jobs = {}
+
+
+def _run_face_analysis(user_id, local_path):
+    """
+    Background thread: run full 3-D face/mouth analysis on the uploaded video,
+    then persist the detected mouth centre back to the database.
+    """
+    _face_analysis_jobs[user_id] = {'status': 'running', 'summary': '', 'mouth_x': None, 'mouth_y': None}
+    try:
+        if lip_sync_processor is None:
+            _face_analysis_jobs[user_id] = {
+                'status': 'error',
+                'summary': 'Lip-sync processor not available',
+                'mouth_x': None, 'mouth_y': None,
+            }
+            return
+
+        result = lip_sync_processor.analyze_video_face_map(local_path, sample_rate=5)
+
+        mx, my = (None, None)
+        if result.get('face_found') and result.get('best_mouth_center'):
+            mx, my = result['best_mouth_center']
+
+        with app.app_context():
+            from models import User as _User
+            pf = _User.query.get(user_id)
+            if pf:
+                if mx is not None:
+                    pf.mouth_x = float(mx)
+                    pf.mouth_y = float(my)
+                db.session.commit()
+
+        _face_analysis_jobs[user_id] = {
+            'status': 'done',
+            'summary': result.get('summary', ''),
+            'mouth_x': float(mx) if mx is not None else None,
+            'mouth_y': float(my) if my is not None else None,
+        }
+    except Exception as exc:
+        _face_analysis_jobs[user_id] = {
+            'status': 'error',
+            'summary': str(exc),
+            'mouth_x': None, 'mouth_y': None,
+        }
+
+
 @app.route("/public/call-video", methods=["GET", "POST"], endpoint="public.call_video")
 @public_figure_required
 def public_call_video():
@@ -795,10 +847,65 @@ def public_call_video():
             if not url:
                 return jsonify({"ok": False, "error": "Failed to save video."}), 400
             pf.call_video_url = url
+            # Clear any old mouth mapping so the new analysis takes over
+            pf.mouth_x = None
+            pf.mouth_y = None
             db.session.commit()
-            return jsonify({"ok": True, "video_url": url})
+
+            # ── Kick off background 3-D face analysis ─────────────────────
+            # Resolve the local disk path to the video so OpenCV can read it.
+            # save_upload() returns a URL (Cloudinary) or a local /static/uploads path.
+            local_path = None
+            parsed = urlparse(url)
+            if parsed.scheme in ('', 'file') or not parsed.netloc:
+                # local path
+                local_path = os.path.join(app.root_path, url.lstrip('/'))
+            elif 'cloudinary.com' in (parsed.netloc or ''):
+                # For Cloudinary we download to a temp file for analysis
+                try:
+                    import tempfile
+                    ext = os.path.splitext(parsed.path)[-1] or '.mp4'
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+                    urllib.request.urlretrieve(url, tmp.name)
+                    local_path = tmp.name
+                except Exception:
+                    local_path = None
+
+            if local_path and os.path.exists(local_path):
+                t = threading.Thread(
+                    target=_run_face_analysis,
+                    args=(pf.id, local_path),
+                    daemon=True,
+                )
+                t.start()
+                auto_detect = True
+            else:
+                auto_detect = False
+
+            return jsonify({"ok": True, "video_url": url, "auto_detect": auto_detect})
         return jsonify({"ok": False, "error": "No video provided."}), 400
     return render_template("public/call_video.html", pf=pf)
+
+
+@app.route("/public/call-video/face-status", methods=["GET"], endpoint="public.call_video_face_status")
+@public_figure_required
+def public_call_video_face_status():
+    """Poll endpoint — front-end checks this after upload to track auto face-detection progress."""
+    pf = current_user()
+    job = _face_analysis_jobs.get(pf.id)
+    if job is None:
+        # No job running; return current saved state
+        return jsonify({
+            "status": "idle",
+            "mouth_x": pf.mouth_x,
+            "mouth_y": pf.mouth_y,
+        })
+    return jsonify({
+        "status": job["status"],
+        "summary": job.get("summary", ""),
+        "mouth_x": job.get("mouth_x"),
+        "mouth_y": job.get("mouth_y"),
+    })
 
 
 @app.route("/public/call-video/remove", methods=["POST"], endpoint="public.call_video_remove")

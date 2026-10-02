@@ -19,17 +19,28 @@
           </div>
           <p class="tiny muted" style="margin-top:8px;"><i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Active — this plays for fans when you accept a video call.</p>
 
+          <!-- Auto face-detection status banner -->
+          <div id="autoDetectBanner" style="display:none;margin-top:12px;background:rgba(43,127,255,0.10);border:1px solid rgba(43,127,255,0.25);border-radius:12px;padding:12px 14px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <i id="autoDetectIcon" class="fa-solid fa-circle-notch fa-spin" style="color:#2b7fff;font-size:18px;"></i>
+              <div>
+                <p style="margin:0;font-weight:600;font-size:13px;" id="autoDetectTitle">Detecting face &amp; mouth position…</p>
+                <p class="tiny muted" style="margin:2px 0 0;" id="autoDetectSub">Analysing video frame by frame — this takes a few seconds</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Mouth Mapping Tool -->
           <div id="mouthMapSection" style="margin-top:18px;background:rgba(43,127,255,0.07);border:1px solid rgba(43,127,255,0.2);border-radius:12px;padding:14px;">
             <p style="font-weight:600;margin-bottom:4px;"><i class="fa-solid fa-face-smile" style="color:#2b7fff;margin-right:6px;"></i>Mouth Position Mapping</p>
-            <p class="tiny muted" style="margin-bottom:12px;">Tap your mouth in the video frame below so lip sync works accurately.</p>
+            <p class="tiny muted" style="margin-bottom:12px;">Your mouth position is detected automatically when you upload. You can also tap to correct it manually.</p>
             <div style="position:relative;display:block;width:100%;cursor:crosshair;" id="mouthMapWrap">
               <video id="mouthMapVideo" src="{{ pf.call_video_url }}" muted style="width:100%;border-radius:10px;display:block;" preload="metadata"></video>
               <div id="mouthDot" style="display:none;position:absolute;width:24px;height:14px;background:rgba(43,127,255,0.9);border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 12px rgba(43,127,255,0.8);"></div>
               <div id="mouthOverlayHint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);border-radius:10px;pointer-events:none;">
                 <div style="text-align:center;color:#fff;">
                   <i class="fa-solid fa-hand-pointer" style="font-size:24px;margin-bottom:6px;opacity:0.9;"></i>
-                  <p class="tiny">Tap your mouth in the video</p>
+                  <p class="tiny">Tap to correct mouth position</p>
                 </div>
               </div>
             </div>
@@ -37,7 +48,7 @@
               {% if pf.mouth_x is not none %}
                 <i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Mouth mapped — tap to update position
               {% else %}
-                Tap your mouth in the video to enable accurate lip sync
+                <i class="fa-solid fa-circle-notch fa-spin" style="color:#2b7fff;"></i> Auto-detecting mouth position…
               {% endif %}
             </div>
             <div id="mouthSaveStatus" class="tiny" style="margin-top:4px;"></div>
@@ -76,17 +87,19 @@
 {% endblock %}
 {% block scripts %}
 <script>
+// ── Upload ────────────────────────────────────────────────────────────────
 async function uploadCallVideo(el) {
   const f = el.files[0]; if (!f) return;
   const status = document.getElementById('statusMsg');
-  status.textContent = 'Uploading...'; status.style.color = '#9ca3af';
+  status.textContent = 'Uploading…'; status.style.color = '#9ca3af';
   const fd = new FormData(); fd.append('video', f);
   try {
     const r = await fetch('{{ url_for("public.call_video") }}', {method: 'POST', body: fd});
     const d = await r.json();
     if (d.ok) {
-      status.textContent = 'Saved! Reloading...'; status.style.color = '#86efac';
-      setTimeout(() => window.location.reload(), 600);
+      status.textContent = 'Saved! Analysing face…'; status.style.color = '#86efac';
+      // Reload page to show new video, then auto-detection banner will poll
+      setTimeout(() => window.location.reload(), 800);
     } else {
       status.textContent = d.error || 'Upload failed.'; status.style.color = '#fca5a5';
     }
@@ -94,6 +107,7 @@ async function uploadCallVideo(el) {
     status.textContent = 'Upload failed.'; status.style.color = '#fca5a5';
   }
 }
+
 async function removeCallVideo() {
   if (!confirm('Remove your call video? Fans will see a standard call screen until you add a new one.')) return;
   const r = await fetch('{{ url_for("public.call_video_remove") }}', {method: 'POST'});
@@ -101,30 +115,112 @@ async function removeCallVideo() {
   if (d.ok) window.location.reload();
 }
 
-// Mouth mapping
-(function() {
+// ── Auto-detection polling ────────────────────────────────────────────────
+(function startAutoDetectPolling() {
+  const banner     = document.getElementById('autoDetectBanner');
+  const icon       = document.getElementById('autoDetectIcon');
+  const title      = document.getElementById('autoDetectTitle');
+  const sub        = document.getElementById('autoDetectSub');
+  const mapStatus  = document.getElementById('mouthMapStatus');
+
+  if (!banner) return; // no video uploaded yet
+
+  let pollInterval = null;
+
+  async function checkStatus() {
+    try {
+      const r = await fetch('{{ url_for("public.call_video_face_status") }}');
+      const d = await r.json();
+
+      if (d.status === 'running') {
+        banner.style.display = 'block';
+        icon.className = 'fa-solid fa-circle-notch fa-spin';
+        icon.style.color = '#2b7fff';
+        title.textContent = 'Detecting face & mouth position…';
+        sub.textContent = 'Analysing video frame by frame — this takes a few seconds';
+        return; // keep polling
+      }
+
+      if (d.status === 'done') {
+        clearInterval(pollInterval);
+        banner.style.display = 'block';
+        icon.className = 'fa-solid fa-circle-check';
+        icon.style.color = '#22d3ee';
+        title.textContent = 'Face detected — mouth position mapped automatically';
+        sub.textContent = d.summary || '';
+
+        // Update dot on the video if we got coordinates
+        if (d.mouth_x != null && d.mouth_y != null) {
+          placeDot(d.mouth_x, d.mouth_y);
+          if (mapStatus) {
+            mapStatus.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Mouth auto-detected — tap to correct if needed';
+          }
+        }
+        // Hide banner after 5 s
+        setTimeout(() => { banner.style.display = 'none'; }, 5000);
+        return;
+      }
+
+      if (d.status === 'error') {
+        clearInterval(pollInterval);
+        banner.style.display = 'block';
+        icon.className = 'fa-solid fa-triangle-exclamation';
+        icon.style.color = '#fca5a5';
+        title.textContent = 'Auto-detection failed — please tap your mouth below';
+        sub.textContent = d.summary || '';
+        if (mapStatus) {
+          mapStatus.innerHTML = 'Tap your mouth in the video to set position manually';
+        }
+        return;
+      }
+
+      // status === 'idle' — no job running, already done from a previous upload
+      clearInterval(pollInterval);
+      if (d.mouth_x != null && d.mouth_y != null) {
+        // Just make sure the dot is shown (page may have reloaded before job finished)
+        placeDot(d.mouth_x, d.mouth_y);
+      }
+    } catch(e) { /* network error — keep trying */ }
+  }
+
+  // Start polling immediately, then every 2 s
+  checkStatus();
+  pollInterval = setInterval(checkStatus, 2000);
+})();
+
+// ── Mouth dot placement helper ────────────────────────────────────────────
+function placeDot(rx, ry) {
   const wrap = document.getElementById('mouthMapWrap');
-  const dot = document.getElementById('mouthDot');
+  const dot  = document.getElementById('mouthDot');
   const hint = document.getElementById('mouthOverlayHint');
+  if (!wrap || !dot) return;
+  dot.style.left = (rx * 100) + '%';
+  dot.style.top  = (ry * 100) + '%';
+  dot.style.display = 'block';
+  if (hint) hint.style.display = 'none';
+}
+
+// ── Manual mouth mapping ──────────────────────────────────────────────────
+(function() {
+  const wrap      = document.getElementById('mouthMapWrap');
+  const dot       = document.getElementById('mouthDot');
+  const hint      = document.getElementById('mouthOverlayHint');
   const saveStatus = document.getElementById('mouthSaveStatus');
-  const mapStatus = document.getElementById('mouthMapStatus');
+  const mapStatus  = document.getElementById('mouthMapStatus');
   if (!wrap) return;
 
   {% if pf.mouth_x is not none %}
   // Restore previously saved dot position
   const vid = document.getElementById('mouthMapVideo');
-  vid.addEventListener('loadedmetadata', () => {
-    const rx = {{ pf.mouth_x }} * 100;
-    const ry = {{ pf.mouth_y }} * 100;
-    dot.style.left = rx + '%';
-    dot.style.top = ry + '%';
-    dot.style.display = 'block';
-    if (hint) hint.style.display = 'none';
-  });
+  if (vid) {
+    vid.addEventListener('loadedmetadata', () => {
+      placeDot({{ pf.mouth_x }}, {{ pf.mouth_y }});
+    });
+  }
   {% endif %}
 
   async function saveMouthPos(rx, ry) {
-    saveStatus.textContent = 'Saving...'; saveStatus.style.color = '#9ca3af';
+    if (saveStatus) { saveStatus.textContent = 'Saving…'; saveStatus.style.color = '#9ca3af'; }
     try {
       const r = await fetch('{{ url_for("public.call_video_mouth") }}', {
         method: 'POST',
@@ -133,13 +229,13 @@ async function removeCallVideo() {
       });
       const d = await r.json();
       if (d.ok) {
-        saveStatus.textContent = '✓ Position saved'; saveStatus.style.color = '#86efac';
-        mapStatus.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Mouth mapped — tap to update position';
+        if (saveStatus) { saveStatus.textContent = '✓ Position saved'; saveStatus.style.color = '#86efac'; }
+        if (mapStatus) mapStatus.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22d3ee;"></i> Mouth mapped — tap to update position';
       } else {
-        saveStatus.textContent = d.error || 'Save failed'; saveStatus.style.color = '#fca5a5';
+        if (saveStatus) { saveStatus.textContent = d.error || 'Save failed'; saveStatus.style.color = '#fca5a5'; }
       }
     } catch(e) {
-      saveStatus.textContent = 'Save failed'; saveStatus.style.color = '#fca5a5';
+      if (saveStatus) { saveStatus.textContent = 'Save failed'; saveStatus.style.color = '#fca5a5'; }
     }
   }
 
@@ -149,10 +245,7 @@ async function removeCallVideo() {
     const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
     const rx = cx / rect.width;
     const ry = cy / rect.height;
-    dot.style.left = (rx * 100) + '%';
-    dot.style.top = (ry * 100) + '%';
-    dot.style.display = 'block';
-    if (hint) hint.style.display = 'none';
+    placeDot(rx, ry);
     saveMouthPos(rx, ry);
   }
 
