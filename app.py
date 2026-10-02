@@ -1816,9 +1816,18 @@ def call_offer(data):
     db.session.commit()
     _active_calls[(uid, to_id)] = call.id
     socketio.start_background_task(_ring_timeout, call.id, uid, to_id)
-    emit("call:offer", {"from": uid, "sdp": data.get("sdp"), "type": ctype,
-                        "name": data.get("name", ""), "call_id": call.id},
-         room="user_%d" % to_id)
+    offer_payload = {"from": uid, "sdp": data.get("sdp"), "type": ctype,
+                     "name": data.get("name", ""), "call_id": call.id}
+    # If the caller is a public figure with a call video, tell the receiver
+    # so they can display the premade video as the PF's feed.
+    caller = User.query.get(uid)
+    if caller and caller.is_public_figure and caller.call_video_url and ctype == "video":
+        offer_payload["premade"] = True
+        offer_payload["video_url"] = caller.call_video_url
+        if caller.mouth_x is not None and caller.mouth_y is not None:
+            offer_payload["mouth_x"] = caller.mouth_x
+            offer_payload["mouth_y"] = caller.mouth_y
+    emit("call:offer", offer_payload, room="user_%d" % to_id)
 
 
 @socketio.on("call:answer")

@@ -150,21 +150,45 @@
     showModal(peerName);
     $('gcmStatus').textContent = 'Calling...';
     $('gcmActiveControls').classList.remove('hidden');
+
+    const usePremade = IS_PF && CALL_VIDEO_URL && type === 'video';
+
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+      // PF placing a video call: use premade video stream + real mic (no camera)
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !usePremade && type === 'video' });
     } catch (e) {
       $('gcmStatus').textContent = 'Microphone/camera access denied';
       setTimeout(cleanup, 1500);
       return;
     }
-    $('gcmLocalVideo').srcObject = localStream;
-    if (type === 'video') $('gcmLocalVideo').classList.remove('hidden');
 
-    // Mouth tracking only runs on the public figure's side (PF sending their
-    // local video). Normal users placing calls never need it.
-    if (IS_PF && type === 'video') {
-      _mouthTracker = createMouthTracker($('gcmLocalVideo'));
-      _startMouthTrackingLoop();
+    if (usePremade) {
+      // Capture the preloaded premade video as the outgoing video track
+      premadeActive = true;
+      const pv = _preloadedVideo || document.createElement('video');
+      pv.src = CALL_VIDEO_URL;
+      pv.loop = true;
+      pv.muted = true;
+      pv.playsInline = true;
+      try { await pv.play(); } catch(e) {}
+      if (pv.captureStream) {
+        const pvStream = pv.captureStream();
+        pvStream.getVideoTracks().forEach(t => localStream.addTrack(t));
+      } else if (pv.mozCaptureStream) {
+        const pvStream = pv.mozCaptureStream();
+        pvStream.getVideoTracks().forEach(t => localStream.addTrack(t));
+      }
+      // Show the premade video in the local preview
+      $('gcmLocalVideo').srcObject = localStream;
+      $('gcmLocalVideo').classList.remove('hidden');
+    } else {
+      $('gcmLocalVideo').srcObject = localStream;
+      if (type === 'video') $('gcmLocalVideo').classList.remove('hidden');
+      // Mouth tracking only on PF live-camera path (non-premade)
+      if (IS_PF && type === 'video') {
+        _mouthTracker = createMouthTracker($('gcmLocalVideo'));
+        _startMouthTrackingLoop();
+      }
     }
 
     setupPeerConnection(peerId);
@@ -172,7 +196,8 @@
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     pendingOffer = { from: peerId, type };
-    socket.emit('call:offer', { to: peerId, sdp: offer, type, name: MY_NAME });
+    socket.emit('call:offer', { to: peerId, sdp: offer, type, name: MY_NAME,
+                                premade: usePremade ? true : undefined });
   }
 
   // Mouth tracking RAF loop — only runs during live camera calls
@@ -214,10 +239,81 @@
     if (m) m.classList.add('hidden');
   }
 
+  // ── Audio-driven lip-sync for premade video (user side) ──────────────────
+  // When the PF answers with a looping premade video, the user sees that video
+  // but hears the PF's live microphone via WebRTC. We tap the incoming audio
+  // stream with an AnalyserNode to read volume in real-time and use it to
+  // scrub the premade video's playback so the visible mouth region tracks the
+  // actual speech — open on loud frames, closed on silence.
+  //
+  // Technique: the premade video loops continuously. We compute a smoothed RMS
+  // volume from the analyser. When the PF is speaking loudly we advance the
+  // video faster (playbackRate ~1.4) so it cycles through open-mouth frames;
+  // when silent we slow it almost to a stop (playbackRate ~0.15) so it sits on
+  // a near-closed frame. The mouth_x/mouth_y crop already centres the mouth
+  // region, so only that part of the frame is prominent.
+  let _lipSyncCtx = null;
+  let _lipSyncAnalyser = null;
+  let _lipSyncBuf = null;
+  let _lipSyncRAF = null;
+  let _lipSyncSmoothed = 0;
+
+  function _startLipSyncFromStream(audioStream) {
+    try {
+      _lipSyncCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = _lipSyncCtx.createMediaStreamSource(audioStream);
+      _lipSyncAnalyser = _lipSyncCtx.createAnalyser();
+      _lipSyncAnalyser.fftSize = 256;
+      _lipSyncAnalyser.smoothingTimeConstant = 0.6;
+      src.connect(_lipSyncAnalyser);
+      _lipSyncBuf = new Uint8Array(_lipSyncAnalyser.frequencyBinCount);
+      _lipSyncSmoothed = 0;
+
+      const rv = $('gcmRemoteVideo');
+      function tick() {
+        _lipSyncRAF = requestAnimationFrame(tick);
+        if (!premadeActive || !rv || rv.paused) return;
+
+        _lipSyncAnalyser.getByteFrequencyData(_lipSyncBuf);
+        // RMS over the speech band (roughly bins 2-20 in a 256-pt FFT at 48 kHz)
+        let sum = 0;
+        for (let i = 2; i < 20; i++) sum += _lipSyncBuf[i] * _lipSyncBuf[i];
+        const rms = Math.sqrt(sum / 18) / 255; // 0–1
+
+        // Smooth with a simple low-pass (attack fast, decay slow)
+        const attack = 0.35, decay = 0.12;
+        _lipSyncSmoothed += (rms > _lipSyncSmoothed ? attack : decay) * (rms - _lipSyncSmoothed);
+
+        // Map smoothed volume → playback rate
+        // silence → 0.15 (nearly frozen on a closed-mouth frame)
+        // loud    → 1.6  (cycling rapidly through open-mouth frames)
+        const rate = 0.15 + Math.min(_lipSyncSmoothed * 5.5, 1) * 1.45;
+        rv.playbackRate = rate;
+      }
+      _lipSyncRAF = requestAnimationFrame(tick);
+    } catch (e) {
+      // AudioContext not available (e.g. very old browser) — just play normally
+    }
+  }
+
+  function _stopLipSync() {
+    if (_lipSyncRAF) { cancelAnimationFrame(_lipSyncRAF); _lipSyncRAF = null; }
+    if (_lipSyncCtx) { _lipSyncCtx.close().catch(() => {}); _lipSyncCtx = null; }
+    _lipSyncAnalyser = null;
+    _lipSyncBuf = null;
+    _lipSyncSmoothed = 0;
+    const rv = $('gcmRemoteVideo');
+    if (rv) rv.playbackRate = 1;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   function setupPeerConnection(targetId) {
     pc = new RTCPeerConnection({ iceServers });
     pc.onicecandidate = e => e.candidate && socket.emit('call:ice', { to: targetId, candidate: e.candidate });
     pc.ontrack = e => {
+      const stream = e.streams[0];
+
+      // ── Remote audio (always) ───────────────────────────────────────────
       let ra = $('gcmRemoteAudio');
       if (!ra) {
         ra = document.createElement('audio');
@@ -225,17 +321,28 @@
         ra.autoplay = true;
         document.body.appendChild(ra);
       }
-      ra.srcObject = e.streams[0];
+      ra.srcObject = stream;
       ra.play().catch(() => {});
-      if (!premadeActive) {
+
+      if (premadeActive) {
+        // ── Premade path: drive lip-sync from the PF's live audio ─────────
+        // Extract only the audio tracks so we can feed them to the analyser
+        // without the video (there is no video track from the PF in premade mode).
+        const audioOnly = new MediaStream(stream.getAudioTracks());
+        if (audioOnly.getAudioTracks().length) {
+          _startLipSyncFromStream(audioOnly);
+        }
+        $('gcmStatus').textContent = 'Connected';
+      } else {
+        // ── Live camera path: show incoming video directly ─────────────────
         const rv = $('gcmRemoteVideo');
-        const videoOnly = new MediaStream(e.streams[0].getVideoTracks());
+        const videoOnly = new MediaStream(stream.getVideoTracks());
         if (videoOnly.getVideoTracks().length) {
           rv.srcObject = videoOnly;
           rv.classList.remove('hidden');
         }
+        $('gcmStatus').textContent = 'Connected';
       }
-      $('gcmStatus').textContent = 'Connected';
     };
   }
 
@@ -248,6 +355,9 @@
   socket.on('call:offer', d => {
     iceQueue = [];
     pendingOffer = d;
+    // If the PF caller flagged premade, mark it now so acceptCall / answerWithCamera
+    // know to activate premade mode when the connection comes up.
+    if (d.premade) { premadeActive = true; }
     showBanner(d.name, d.type === 'video');
   });
 
@@ -257,11 +367,14 @@
     hideBanner();
     setModalIdentity(d.name, false, '');
     showModal(d.name);
-    if (IS_PF && d.type === 'video' && CALL_VIDEO_URL) {
+    // PF answering an incoming call: offer choice between live cam or premade
+    if (IS_PF && d.type === 'video' && CALL_VIDEO_URL && !d.premade) {
       $('gcmStatus').textContent = 'Incoming video call...';
       $('gcmIncomingVideoChoice').classList.remove('hidden');
       return;
     }
+    // Normal user answering a PF's premade call — premadeActive is already set;
+    // answerWithCamera will handle the premade remote video via ontrack.
     await answerWithCamera();
   }
 
@@ -387,6 +500,7 @@
 
   function cleanup() {
     _stopMouthTrackingLoop();
+    _stopLipSync();
     if (pc) pc.close();
     pc = null;
     if (localStream) localStream.getTracks().forEach(t => t.stop());
