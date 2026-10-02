@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Private Chat",
   "short_name": "Private Chat",
-  "description": "Chat, call and connect with your favorite public figures.",
+  "description": "Private, direct messaging and calls.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

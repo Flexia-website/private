@@ -10,20 +10,9 @@
   <main class="app-main">
     <div class="glass card-center">
       <h2>Connect to Public Figure</h2>
-      <p class="muted">Enter the registered phone number</p>
+      <p class="muted">Enter the registered phone number with country code</p>
       <div class="form">
-        <div class="row">
-          <select id="country" class="input">
-            <option value="+234">NG +234</option>
-            <option value="+1">US +1</option>
-            <option value="+44">UK +44</option>
-            <option value="+91">IN +91</option>
-            <option value="+27">ZA +27</option>
-            <option value="+233">GH +233</option>
-            <option value="+254">KE +254</option>
-          </select>
-          <input id="phone" class="input" placeholder="XXX XXX XXXX">
-        </div>
+        <input id="phone" class="input" type="tel" inputmode="tel" autocomplete="off" placeholder="Phone number with country code">
         <button id="continueBtn" class="btn btn-primary glow">Continue</button>
       </div>
       <div id="result" class="result"></div>
@@ -35,10 +24,8 @@
 <script>
 const btn = document.getElementById('continueBtn');
 btn.onclick = async () => {
-  const c = document.getElementById('country').value;
-  const p = document.getElementById('phone').value.trim();
-  if (!p) return;
-  const phone = p.startsWith('+') ? p : c + p.replace(/\D/g, '');
+  const phone = document.getElementById('phone').value.trim();
+  if (!phone) return;
   btn.disabled = true; btn.innerHTML = 'Checking...';
   const res = await fetch('{{ url_for("user.connect") }}', {
     method: 'POST',

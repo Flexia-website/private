@@ -10,7 +10,7 @@ def init_db(app):
         seed_fan_card_designs()
 
 def migrate_columns():
-    """Add any new columns to existing tables (SQLite-safe, additive only)."""
+    """Add any new columns to existing tables (additive only; works on SQLite and Postgres)."""
     try:
         inspector = inspect(db.engine)
         existing_cols = {c["name"] for c in inspector.get_columns("users")}
@@ -31,7 +31,7 @@ def migrate_columns():
             db.session.commit()
             print("[BOOT] Migrated: added calls.status")
         if "ended_at" not in call_cols:
-            db.session.execute(text("ALTER TABLE calls ADD COLUMN ended_at DATETIME"))
+            db.session.execute(text("ALTER TABLE calls ADD COLUMN ended_at TIMESTAMP"))
             db.session.commit()
             print("[BOOT] Migrated: added calls.ended_at")
 

@@ -32,26 +32,25 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
   background:radial-gradient(closest-side,rgba(43,127,255,.55),rgba(43,127,255,0));filter:blur(6px);animation:pulse 3.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
 
-/* ---------- Public figure cards ---------- */
-.card{position:absolute;left:50%;top:22px;width:150px;height:210px;margin-left:-75px;border-radius:20px;
-  background:linear-gradient(165deg,rgba(24,38,70,.9),rgba(8,12,24,.92));
-  border:1px solid rgba(120,180,255,.22);box-shadow:0 18px 40px rgba(0,0,0,.55);
-  display:flex;flex-direction:column;align-items:center;padding-top:20px;
-  transform:translateX(calc(var(--o) * 112px)) translateZ(calc(var(--z) * -1px)) rotateY(calc(var(--o) * -22deg)) scale(calc(1 - var(--a) * .14));
-  opacity:calc(1 - var(--a) * .38);transition:transform .9s cubic-bezier(.2,.8,.2,1),opacity .9s,box-shadow .9s,border-color .9s;z-index:calc(10 - var(--a))}
-.card.active{border-color:rgba(34,211,238,.7);box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 46px rgba(43,127,255,.55),0 22px 46px rgba(0,0,0,.6)}
-.avatar{position:relative;width:96px;height:96px;border-radius:50%;overflow:hidden;background:linear-gradient(160deg,hsl(var(--h) 85% 62%),hsl(calc(var(--h) + 50) 80% 38%));
-  box-shadow:0 0 0 3px rgba(255,255,255,.08)}
-.avatar .head{position:absolute;left:50%;top:20px;width:34px;height:34px;margin-left:-17px;border-radius:50%;background:rgba(4,7,13,.78)}
-.avatar .body{position:absolute;left:50%;bottom:-24px;width:74px;height:58px;margin-left:-37px;border-radius:50% 50% 0 0;background:rgba(4,7,13,.78)}
-.role{margin-top:12px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:5px}
-.handle{font-size:11px;color:var(--muted);margin-top:2px}
-.badge{width:16px;height:16px;transform:scale(0);filter:drop-shadow(0 0 4px rgba(10,132,255,.8))}
-.card.active .badge{animation:pop .7s .35s cubic-bezier(.3,1.7,.5,1) forwards}
-@keyframes pop{0%{transform:scale(0) rotate(-40deg)}100%{transform:scale(1) rotate(0)}}
-.ring{position:absolute;left:50%;top:14px;width:108px;height:108px;margin-left:-54px;border-radius:50%;border:2px solid var(--cyan);opacity:0;pointer-events:none}
-.card.active .ring{animation:ring 2.4s ease-out infinite}
-@keyframes ring{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}
+/* ---------- Single public figure card ---------- */
+.card{position:absolute;left:50%;top:26px;width:170px;height:232px;margin-left:-85px;border-radius:22px;
+  background:linear-gradient(165deg,rgba(24,38,70,.92),rgba(8,12,24,.94));
+  border:1px solid rgba(34,211,238,.6);
+  box-shadow:0 0 0 1px rgba(34,211,238,.2),0 0 50px rgba(43,127,255,.5),0 22px 46px rgba(0,0,0,.6);
+  display:flex;flex-direction:column;align-items:center;padding-top:24px;z-index:10;
+  animation:float 5s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0) rotateY(-6deg)}50%{transform:translateY(-10px) rotateY(6deg)}}
+.avatar{position:relative;width:104px;height:104px;border-radius:50%;overflow:hidden;
+  background:linear-gradient(160deg,hsl(215 85% 62%),hsl(265 80% 40%));box-shadow:0 0 0 3px rgba(255,255,255,.08)}
+.avatar .head{position:absolute;left:50%;top:22px;width:38px;height:38px;margin-left:-19px;border-radius:50%;background:rgba(4,7,13,.78)}
+.avatar .body{position:absolute;left:50%;bottom:-26px;width:80px;height:62px;margin-left:-40px;border-radius:50% 50% 0 0;background:rgba(4,7,13,.78)}
+.role{margin-top:14px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px}
+.handle{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:1px;text-transform:uppercase}
+.badge{width:18px;height:18px;filter:drop-shadow(0 0 4px rgba(10,132,255,.8));animation:pop 4s ease-in-out infinite}
+@keyframes pop{0%,8%{transform:scale(0) rotate(-40deg)}16%{transform:scale(1.25) rotate(6deg)}22%,100%{transform:scale(1) rotate(0)}}
+.ring{position:absolute;left:50%;top:18px;width:116px;height:116px;margin-left:-58px;border-radius:50%;border:2px solid var(--cyan);opacity:0;pointer-events:none;animation:ring 2.6s ease-out infinite}
+.ring.r2{animation-delay:1.3s}
+@keyframes ring{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.6);opacity:0}}
 
 /* ---------- Camera flash ---------- */
 .flash{position:absolute;left:50%;top:70px;width:220px;height:220px;margin:-110px 0 0 -110px;border-radius:50%;pointer-events:none;
@@ -86,10 +85,10 @@ button{margin-top:12px;padding:11px 26px;border:0;border-radius:12px;color:#fff;
   background:linear-gradient(90deg,var(--blue),var(--cyan));box-shadow:0 0 24px rgba(43,127,255,.45)}
 button:active{transform:scale(.97)}
 
-@media (max-width:380px){.card{width:132px;height:190px;margin-left:-66px}.avatar{width:84px;height:84px}}
+@media (max-width:380px){.card{width:150px;height:212px;margin-left:-75px}.avatar{width:92px;height:92px}}
 @media (prefers-reduced-motion:reduce){
   .beam,.floor,.sky i,.ring,.pill i{animation:none!important}
-  .card{transition:none}
+  .card,.badge{animation:none!important}
   .hearts,.flash{display:none}
 }
 </style>
@@ -111,6 +110,12 @@ button:active{transform:scale(.97)}
   <div class="beam a"></div>
   <div class="beam b"></div>
   <div class="floor"></div>
+  <div class="card">
+    <div class="ring"></div><div class="ring r2"></div>
+    <div class="avatar"><span class="head"></span><span class="body"></span></div>
+    <div class="role">Public Figure<svg class="badge"><use href="#verified"/></svg></div>
+    <div class="handle">Verified</div>
+  </div>
   <div class="hearts" id="hearts"></div>
   <div class="flash" id="flash"></div>
 </div>
@@ -120,23 +125,14 @@ button:active{transform:scale(.97)}
   <div class="stat"><b id="likes">0</b><span>Likes</span></div>
 </div>
 
-<h1>YOUR STARS</h1>
-<p class="tag">Your favorite public figures are one connection away.</p>
+<h1>PRIVATE CHAT</h1>
+<p class="tag">Your public figure is one connection away.</p>
 
 <div class="pill" id="status"><i></i><span id="statusText">You're offline</span></div>
 <button id="retry" type="button">Try again</button>
 
 <script>
 (function () {
-  var FIGURES = [
-    { role: "Singer",    handle: "@stagevoice",  hue: 285, followers: 48200000, likes: 391000000 },
-    { role: "Actor",     handle: "@onscreen",    hue: 205, followers: 31700000, likes: 204000000 },
-    { role: "Athlete",   handle: "@goldenmoment",hue: 150, followers: 27400000, likes: 158000000 },
-    { role: "Creator",   handle: "@dailydrop",   hue: 340, followers: 19800000, likes: 262000000 },
-    { role: "Presenter", handle: "@primetime",   hue: 35,  followers: 12600000, likes: 77000000 }
-  ];
-  var n = FIGURES.length, active = 0;
-  var stage = document.getElementById("stage");
   var hearts = document.getElementById("hearts");
   var flash = document.getElementById("flash");
   var fEl = document.getElementById("followers");
@@ -154,67 +150,30 @@ button:active{transform:scale(.97)}
     sky.appendChild(st);
   }
 
-  // Build the cards
-  var cards = FIGURES.map(function (f) {
-    var c = document.createElement("div");
-    c.className = "card";
-    c.style.setProperty("--h", f.hue);
-    c.innerHTML =
-      '<div class="ring"></div>' +
-      '<div class="avatar"><span class="head"></span><span class="body"></span></div>' +
-      '<div class="role">' + f.role + '<svg class="badge"><use href="#verified"/></svg></div>' +
-      '<div class="handle">' + f.handle + '</div>';
-    stage.insertBefore(c, stage.querySelector(".hearts"));
-    return c;
-  });
-
   function humanize(v) {
-    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
-    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+    if (v >= 1e9) return (v / 1e9).toFixed(2) + "B";
+    if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
     if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
     return String(Math.round(v));
   }
 
-  var shown = { f: 0, l: 0 };
-  function countTo(target) {
-    var from = { f: shown.f, l: shown.l }, start = null, dur = 1400;
-    function step(ts) {
-      if (start === null) start = ts;
-      var p = Math.min((ts - start) / dur, 1), e = 1 - Math.pow(1 - p, 3);
-      shown.f = from.f + (target.followers - from.f) * e;
-      shown.l = from.l + (target.likes - from.l) * e;
-      fEl.textContent = humanize(shown.f);
-      lEl.textContent = humanize(shown.l);
-      if (p < 1) requestAnimationFrame(step);
-    }
-    if (reduce) { shown.f = target.followers; shown.l = target.likes; fEl.textContent = humanize(shown.f); lEl.textContent = humanize(shown.l); return; }
-    requestAnimationFrame(step);
+  // Follower and like counts climb steadily for the one figure on stage
+  var followers = 0, likes = 0, targetF = 2400000, targetL = 18600000;
+  function render() { fEl.textContent = humanize(followers); lEl.textContent = humanize(likes); }
+  function tick() {
+    followers += (targetF - followers) * 0.06 + 1;
+    likes += (targetL - likes) * 0.06 + 1;
+    if (targetF - followers < 5000) { targetF += 20000 + Math.random() * 60000; targetL += 150000 + Math.random() * 400000; }
+    render();
   }
-
-  function layout() {
-    cards.forEach(function (c, i) {
-      var o = ((i - active + n + 2) % n) - 2;      // -2 .. 2
-      var a = Math.abs(o);
-      c.style.setProperty("--o", o);
-      c.style.setProperty("--a", a);
-      c.style.setProperty("--z", a * 60);
-      c.classList.toggle("active", o === 0);
-      c.style.visibility = a > 2 ? "hidden" : "visible";
-    });
-  }
+  if (reduce) { followers = targetF; likes = targetL; render(); } else { setInterval(tick, 120); }
 
   function fireFlash() {
     if (reduce) return;
     flash.classList.remove("go");
     void flash.offsetWidth;
     flash.classList.add("go");
-  }
-
-  function next() {
-    active = (active + 1) % n;
-    layout();
-    countTo(FIGURES[active]);
-    setTimeout(fireFlash, 450);
+    setTimeout(fireFlash, 1800 + Math.random() * 2600);
   }
 
   function spawnHeart() {
@@ -229,10 +188,7 @@ button:active{transform:scale(.97)}
     setTimeout(function () { h.remove(); }, 4000);
   }
 
-  layout();
-  countTo(FIGURES[0]);
   setTimeout(fireFlash, 700);
-  setInterval(next, 3600);
   setInterval(spawnHeart, 420);
 
   // Reconnect handling

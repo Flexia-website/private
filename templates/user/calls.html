@@ -15,7 +15,7 @@
         <a class="btn btn-primary glow" href="{{ url_for('user.chat_with_pf') }}">Open Chat to Call</a>
       </div>
     {% else %}
-      <p class="muted center">Connect to a public figure to make calls.</p>
+      <p class="muted center">Connect first to make calls.</p>
     {% endif %}
     <h3 class="section-title">Recent</h3>
     {% for c in calls %}

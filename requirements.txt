@@ -15,3 +15,5 @@ numpy
 dlib-bin
 scipy
 cloudinary
+psycopg2-binary
+psycogreen

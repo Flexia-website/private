@@ -32,6 +32,14 @@ from lip_sync_video_processor import LipSyncVideoGenerator, SessionRecorder
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config.from_object(Config)
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+# With Postgres under gevent, make the driver cooperative so database calls
+# don't block websockets/calls for other users.
+if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
+    try:
+        from psycogreen.gevent import patch_psycopg
+        patch_psycopg()
+    except ImportError:
+        pass
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
@@ -314,9 +322,26 @@ def generate_verification_code():
     return str(random.randint(100000, 999999))
 
 
+def _ice_servers():
+    """WebRTC ICE servers. Defaults to Google STUN; set ICE_SERVERS_JSON to add a TURN
+    relay (needed for many mobile networks), e.g.
+    [{"urls":"stun:stun.l.google.com:19302"},
+     {"urls":"turn:HOST:3478","username":"USER","credential":"PASS"}]"""
+    default = [{"urls": "stun:stun.l.google.com:19302"}]
+    raw = app.config.get("ICE_SERVERS_JSON") or ""
+    if not raw:
+        return default
+    try:
+        servers = json.loads(raw)
+        return servers if isinstance(servers, list) and servers else default
+    except ValueError:
+        print("[CALLS] ICE_SERVERS_JSON is not valid JSON; using default STUN")
+        return default
+
+
 @app.context_processor
 def inject_globals():
-    return {"current_user": current_user(), "now": datetime.utcnow()}
+    return {"current_user": current_user(), "now": datetime.utcnow(), "ice_servers": _ice_servers()}
 
 
 app.jinja_env.filters["humanize"] = humanize_count
@@ -543,8 +568,15 @@ def user_home():
 @user_required
 def user_connect():
     if request.method == "POST":
-        phone = request.form.get("phone", "").strip()
-        pf = User.query.filter_by(phone=phone, role="public_figure", status="active").first()
+        # The person types the full international number (country code included);
+        # compare digits only so spaces, dashes and a leading + don't matter.
+        wanted = normalize_phone_for_verification(request.form.get("phone", ""))
+        pf = None
+        if wanted:
+            for cand in User.query.filter_by(role="public_figure", status="active").all():
+                if normalize_phone_for_verification(cand.phone or "") == wanted:
+                    pf = cand
+                    break
         if not pf:
             return jsonify({"ok": False, "error": "No active public figure found."})
         return jsonify({"ok": True, "public_figure": {
@@ -1419,6 +1451,7 @@ def _delayed_offline(uid):
     if uid not in _online:  # no new connection arrived during the grace period
         with app.app_context():
             _broadcast_presence(uid, False)
+            _drop_calls_for(uid)
 
 
 def _mark_offline(uid, sid):
@@ -1507,56 +1540,133 @@ def on_read(data):
         emit("read", {"by": uid}, room="user_%d" % int(peer))
 
 
-_active_calls = {}  # (caller_id, receiver_id) -> Call.id, for the currently ringing/connected call between this pair
+_active_calls = {}      # (caller_id, receiver_id) -> Call.id for the ringing/connected call between a pair
+_call_answered_at = {}  # Call.id -> when it was picked up, so duration excludes ringing time
+
 
 @socketio.on("disconnect")
 def on_disconnect():
     uid = session.get("user_id")
     if not uid:
         return
+    # Presence + any call cleanup happens after a short grace period (see _delayed_offline),
+    # and only if the user has no other tab/connection left.
     _mark_offline(uid, request.sid)
-    # Clean up any call this socket was part of that never got a proper end signal
-    stale_keys = [k for k in _active_calls if uid in k]
-    for k in stale_keys:
-        call_pk = _active_calls.pop(k, None)
+
+
+def _may_signal(uid, to_id):
+    """Calls are only allowed between a fan and the public figure they're connected to."""
+    if (uid, to_id) in _active_calls or (to_id, uid) in _active_calls:
+        return True
+    return to_id in _presence_audience(uid)
+
+
+def _finish_call(call_pk, ringing_status):
+    """Close out a Call row: a ringing call becomes `ringing_status`; a connected one gets
+    its end time and talk duration."""
+    call = Call.query.get(call_pk)
+    if not call:
+        _call_answered_at.pop(call_pk, None)
+        return None
+    now = datetime.utcnow()
+    if call.status == "ringing":
+        call.status = ringing_status
+        call.ended_at = now
+    elif call.status == "completed" and not call.ended_at:
+        call.ended_at = now
+        started = _call_answered_at.get(call_pk) or call.created_at
+        call.duration = max(0, int((now - started).total_seconds()))
+    db.session.commit()
+    _call_answered_at.pop(call_pk, None)
+    return call
+
+
+def _drop_calls_for(uid):
+    """The user is completely gone (no connection left): end their calls and tell the other side."""
+    for key in [k for k in _active_calls if uid in k]:
+        call_pk = _active_calls.pop(key, None)
         if call_pk:
-            call = Call.query.get(call_pk)
-            if call and call.status == "ringing":
-                call.status = "failed"
-                call.ended_at = datetime.utcnow()
-                db.session.commit()
+            _finish_call(call_pk, "failed")
+        other = key[0] if key[1] == uid else key[1]
+        socketio.emit("call:end", {"from": uid}, room="user_%d" % other)
+
+
+def _ring_timeout(call_pk, caller_id, receiver_id):
+    socketio.sleep(app.config["CALL_RING_TIMEOUT"])
+    with app.app_context():
+        call = Call.query.get(call_pk)
+        if not call or call.status != "ringing":
+            return
+        if _active_calls.get((caller_id, receiver_id)) == call_pk:
+            _active_calls.pop((caller_id, receiver_id), None)
+        _finish_call(call_pk, "missed")
+        socketio.emit("call:end", {"from": receiver_id}, room="user_%d" % caller_id)
+        socketio.emit("call:end", {"from": caller_id}, room="user_%d" % receiver_id)
+
+
+def _record_missed(caller_id, receiver_id, call_type):
+    """Log a call that could not ring (so the public figure still sees who tried)."""
+    now = datetime.utcnow()
+    db.session.add(Call(caller_id=caller_id, receiver_id=receiver_id, call_type=call_type,
+                        status="missed", ended_at=now))
+    db.session.commit()
 
 
 @socketio.on("call:offer")
 def call_offer(data):
     uid = session.get("user_id")
-    to = data.get("to")
-    if uid and to and str(to).isdigit():
-        to_id = int(to)
-        call = Call(caller_id=uid, receiver_id=to_id,
-                    call_type=data.get("type", "voice"), status="ringing")
-        db.session.add(call)
-        db.session.commit()
-        _active_calls[(uid, to_id)] = call.id
-        emit("call:offer", {"from": uid, "sdp": data.get("sdp"),
-                            "type": data.get("type", "voice"),
-                            "name": data.get("name", ""), "call_id": call.id},
-             room="user_%d" % to_id)
+    to = (data or {}).get("to")
+    if not uid or not to or not str(to).isdigit():
+        return
+    to_id = int(to)
+    ctype = data.get("type", "voice")
+    if ctype not in ("voice", "video"):
+        ctype = "voice"
+
+    if to_id == uid or to_id not in _presence_audience(uid):
+        emit("call:unavailable", {"to": to_id, "reason": "not_allowed"})
+        return
+    if not is_user_online(to_id):
+        _record_missed(uid, to_id, ctype)
+        emit("call:unavailable", {"to": to_id, "reason": "offline"})
+        return
+    if any(to_id in k and uid not in k for k in _active_calls):
+        _record_missed(uid, to_id, ctype)
+        emit("call:unavailable", {"to": to_id, "reason": "busy"})
+        return
+
+    # A fresh call from the same caller replaces any earlier unfinished one
+    old = _active_calls.pop((uid, to_id), None)
+    if old:
+        _finish_call(old, "missed")
+
+    call = Call(caller_id=uid, receiver_id=to_id, call_type=ctype, status="ringing")
+    db.session.add(call)
+    db.session.commit()
+    _active_calls[(uid, to_id)] = call.id
+    socketio.start_background_task(_ring_timeout, call.id, uid, to_id)
+    emit("call:offer", {"from": uid, "sdp": data.get("sdp"), "type": ctype,
+                        "name": data.get("name", ""), "call_id": call.id},
+         room="user_%d" % to_id)
 
 
 @socketio.on("call:answer")
 def call_answer(data):
     uid = session.get("user_id")
-    to = data.get("to")
+    to = (data or {}).get("to")
     if not uid or not to or not str(to).isdigit():
         return
     to_id = int(to)
-    call_pk = _active_calls.get((to_id, uid))  # caller was `to_id`, we (uid) are the receiver answering
-    if call_pk:
-        call = Call.query.get(call_pk)
-        if call:
-            call.status = "completed"
-            db.session.commit()
+    call_pk = _active_calls.get((to_id, uid))  # the caller was `to_id`; we (uid) are answering
+    if not call_pk:
+        # Nothing to answer any more (caller hung up or it timed out): tell this client to stop
+        emit("call:end", {"from": to_id})
+        return
+    call = Call.query.get(call_pk)
+    if call and call.status == "ringing":
+        call.status = "completed"
+        db.session.commit()
+        _call_answered_at[call_pk] = datetime.utcnow()
     payload = {"from": uid, "sdp": data.get("sdp")}
     if data.get("premade"):
         # Never trust the client's claimed video; always re-verify against the DB
@@ -1573,29 +1683,26 @@ def call_answer(data):
 @socketio.on("call:ice")
 def call_ice(data):
     uid = session.get("user_id")
-    to = data.get("to")
-    if uid and to and str(to).isdigit():
+    to = (data or {}).get("to")
+    if uid and to and str(to).isdigit() and _may_signal(uid, int(to)):
         emit("call:ice", {"from": uid, "candidate": data.get("candidate")}, room="user_%d" % int(to))
 
 
 @socketio.on("call:end")
 def call_end(data):
     uid = session.get("user_id")
-    to = data.get("to")
-    if uid and to and str(to).isdigit():
-        to_id = int(to)
-        call_pk = _active_calls.pop((uid, to_id), None) or _active_calls.pop((to_id, uid), None)
-        if call_pk:
-            call = Call.query.get(call_pk)
-            if call and call.status == "ringing":
-                call.status = "declined" if call.receiver_id == uid else "missed"
-                call.ended_at = datetime.utcnow()
-                db.session.commit()
-            elif call and call.status == "completed" and not call.ended_at:
-                call.ended_at = datetime.utcnow()
-                call.duration = int((call.ended_at - call.created_at).total_seconds())
-                db.session.commit()
-        emit("call:end", {"from": uid}, room="user_%d" % to_id)
+    to = (data or {}).get("to")
+    if not uid or not to or not str(to).isdigit():
+        return
+    to_id = int(to)
+    if not _may_signal(uid, to_id):
+        return
+    key = (uid, to_id) if (uid, to_id) in _active_calls else ((to_id, uid) if (to_id, uid) in _active_calls else None)
+    if key:
+        call_pk = _active_calls.pop(key)
+        # still ringing: the receiver hanging up = declined, the caller hanging up = missed
+        _finish_call(call_pk, "declined" if key[1] == uid else "missed")
+    emit("call:end", {"from": uid}, room="user_%d" % to_id)
 
 
 # ---------------- Lip Sync ----------------

@@ -4,7 +4,7 @@
  * - If a page navigation fails because the network is down, shows /offline.
  * Bump VERSION to force clients to refresh their caches.
  */
-const VERSION = "v1";
+const VERSION = "v3";
 const CACHE = "private-chat-" + VERSION;
 const OFFLINE_URL = "/offline";
 const PRECACHE = [

@@ -5,10 +5,17 @@
   const IS_PF = scriptTag.dataset.isPf === 'true';
   const CALL_VIDEO_URL = scriptTag.dataset.callVideoUrl || '';
 
+  let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  try {
+    const parsed = JSON.parse(scriptTag.dataset.iceServers || '');
+    if (Array.isArray(parsed) && parsed.length) iceServers = parsed;
+  } catch (e) {}
+
   const socket = io();
   socket.on('connect', () => socket.emit('join', {}));
 
   let pc = null, localStream = null, pendingOffer = null, premadeActive = false, isMuted = false;
+  let iceQueue = [];  // candidates that arrive before we have a remote description
 
   // Let a chat.html page on the same tab claim ownership of an in-progress call
   // so the two UIs don't fight over the same <video>/<audio> elements.
@@ -82,7 +89,7 @@
   }
 
   function setupPeerConnection(targetId) {
-    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pc = new RTCPeerConnection({ iceServers });
     pc.onicecandidate = e => e.candidate && socket.emit('call:ice', { to: targetId, candidate: e.candidate });
     pc.ontrack = e => {
       let ra = $('gcmRemoteAudio');
@@ -106,7 +113,14 @@
     };
   }
 
+  async function flushIce() {
+    if (!pc || !pc.remoteDescription) return;
+    const queued = iceQueue; iceQueue = [];
+    for (const c of queued) { try { await pc.addIceCandidate(c); } catch (e) {} }
+  }
+
   socket.on('call:offer', d => {
+    iceQueue = [];
     pendingOffer = d;
     showBanner(d.name, d.type === 'video');
   });
@@ -145,6 +159,7 @@
     setupPeerConnection(d.from);
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
     await pc.setRemoteDescription(d.sdp);
+    await flushIce();
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
     socket.emit('call:answer', { to: d.from, sdp: ans });
@@ -167,6 +182,7 @@
     setupPeerConnection(d.from);
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
     await pc.setRemoteDescription(d.sdp);
+    await flushIce();
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
     socket.emit('call:answer', { to: d.from, sdp: ans, premade: true, video_url: CALL_VIDEO_URL });
@@ -214,10 +230,27 @@
       $('gcmStatus').textContent = 'Connected';
     }
     await pc.setRemoteDescription(d.sdp);
+    await flushIce();
     $('gcmStatus').textContent = 'Connected';
   });
-  socket.on('call:ice', async d => pc && d.candidate && await pc.addIceCandidate(d.candidate).catch(() => {}));
+  socket.on('call:ice', async d => {
+    if (!d.candidate) return;
+    if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(d.candidate); } catch (e) {} }
+    else iceQueue.push(d.candidate);
+  });
   socket.on('call:end', () => { hideBanner(); cleanup(); });
+  socket.on('call:unavailable', d => {
+    const reason = d && d.reason;
+    $('gcmStatus').textContent = reason === 'busy' ? 'Busy on another call'
+      : reason === 'offline' ? 'Not available right now' : "Can't place this call";
+    setTimeout(cleanup, 2200);
+  });
+
+  // This is a multi-page app: leaving the page kills the connection, so hang up properly
+  // instead of leaving the other person on a dead call.
+  window.addEventListener('pagehide', () => {
+    if (pc && pendingOffer) socket.emit('call:end', { to: pendingOffer.from });
+  });
 
   function cleanup() {
     if (pc) pc.close();
@@ -225,6 +258,7 @@
     if (localStream) localStream.getTracks().forEach(t => t.stop());
     localStream = null;
     pendingOffer = null;
+    iceQueue = [];
     premadeActive = false;
     const rv = $('gcmRemoteVideo');
     if (rv) { rv.pause(); rv.src = ''; rv.srcObject = null; rv.loop = false; rv.muted = false; rv.style.objectPosition = ''; rv.classList.add('hidden'); }

@@ -73,7 +73,8 @@
         data-user-id="{{ current_user.id }}"
         data-user-name="{{ current_user.full_name }}"
         data-is-pf="{{ 'true' if current_user.role == 'public_figure' else 'false' }}"
-        data-call-video-url="{{ current_user.call_video_url or '' }}"></script>
+        data-call-video-url="{{ current_user.call_video_url or '' }}"
+        data-ice-servers='{{ ice_servers|tojson }}'></script>
 {% endif %}
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
