@@ -999,7 +999,10 @@ def admin_assign_user():
     pf_id = request.form.get("pf_id", "")
     u = User.query.get(int(u_id)) if u_id.isdigit() else None
     pf = User.query.get(int(pf_id)) if pf_id.isdigit() else None
-    if u and pf:
+    if u and pf and u.role == "user" and pf.role == "public_figure":
+        Connection.query.filter_by(user_id=u.id, active=True).update({"active": False})
+        db.session.add(Connection(user_id=u.id, public_figure_id=pf.id,
+                                  assigned_by=current_user().id, active=True))
         u.assigned_public_figure_id = pf.id
         db.session.commit()
         flash("User assigned.", "success")
@@ -1013,6 +1016,7 @@ def admin_assign_user():
 def admin_unassign_user(uid):
     u = User.query.get_or_404(uid)
     u.assigned_public_figure_id = None
+    Connection.query.filter_by(user_id=u.id, active=True).update({"active": False})
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -1392,8 +1396,10 @@ def upload_voice_note():
     to = request.form.get("to")
     voice_file = request.files.get("voice")
 
-    if not to or not voice_file:
+    if not to or not str(to).isdigit() or not voice_file:
         return jsonify({"ok": False, "error": "Missing recipient or voice file"}), 400
+    if int(to) not in _presence_audience(u.id):
+        return jsonify({"ok": False, "error": "You can only message your connected public figure"}), 403
 
     if not allowed_file(voice_file.filename, kinds=("audio",)):
         return jsonify({"ok": False, "error": "Invalid audio file"}), 400
@@ -1416,6 +1422,42 @@ def upload_voice_note():
 
 
 # ---------------- Socket.IO ----------------
+# ---- Message safety ----
+MAX_MESSAGE_LEN = 4000
+MESSAGE_TYPES = {"text", "image", "video", "voice", "link"}
+_SAFE_URL_RE = re.compile(r"^[A-Za-z0-9._~:/?#@!$&()*+,;=%\[\]-]+$")   # no quotes, <, >, spaces or backslashes
+_LINK_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
+               "tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"}
+
+
+def is_own_media_url(url):
+    """True only for files this app stored: a local upload or our own Cloudinary account."""
+    if not isinstance(url, str) or not url or len(url) > 500 or not _SAFE_URL_RE.match(url):
+        return False
+    if url.startswith("/static/uploads/"):
+        return ".." not in url
+    if USE_CLOUDINARY:
+        return url.startswith("https://res.cloudinary.com/%s/" % cloudinary.config().cloud_name)
+    return False
+
+
+def clean_link_preview(lp):
+    """Rebuild a link preview from untrusted input: only TikTok/YouTube URLs, https thumbnails."""
+    if not isinstance(lp, dict):
+        return None
+    url = lp.get("url")
+    if not isinstance(url, str) or len(url) > 500 or not _SAFE_URL_RE.match(url):
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or (parsed.hostname or "").lower() not in _LINK_HOSTS:
+        return None
+    thumb = lp.get("thumbnail") or ""
+    if not (isinstance(thumb, str) and len(thumb) <= 500 and thumb.startswith("https://") and _SAFE_URL_RE.match(thumb)):
+        thumb = ""
+    provider = "tiktok" if "tiktok" in (parsed.hostname or "") else "youtube"
+    return {"url": url, "title": str(lp.get("title") or "")[:200], "thumbnail": thumb, "provider": provider}
+
+
 # ---- Presence: who is actually connected right now ----
 # Single worker process (see Dockerfile), so in-memory tracking is enough.
 _online = {}            # user_id -> set of connected socket ids
@@ -1498,26 +1540,48 @@ def on_join(data=None):
 @socketio.on("typing")
 def on_typing(data):
     uid = session.get("user_id")
-    to = data.get("to")
-    if uid and to and str(to).isdigit():
+    to = (data or {}).get("to")
+    if uid and to and str(to).isdigit() and int(to) in _presence_audience(uid):
         emit("typing", {"from": uid}, room="user_%d" % int(to))
 
 
 @socketio.on("message")
 def on_message(data):
     uid = session.get("user_id")
-    if not uid:
+    if not uid or not isinstance(data, dict):
         return
     raw_to = data.get("to")
     if raw_to is None or not str(raw_to).isdigit():
         return
     to = int(raw_to)
-    text = data.get("message", "")
+    # Only a fan and the public figure they're connected to may message each other
+    if to not in _presence_audience(uid):
+        emit("message:error", {"reason": "not_allowed"})
+        return
+
     mtype = data.get("type", "text")
+    if mtype not in MESSAGE_TYPES:
+        emit("message:error", {"reason": "invalid"})
+        return
+    text = data.get("message", "")
+    text = text.strip()[:MAX_MESSAGE_LEN] if isinstance(text, str) else ""
     media = data.get("media", "")
+
     if mtype == "link":
-        import json as _json
-        text = _json.dumps(data.get("link_preview", {}))
+        lp = clean_link_preview(data.get("link_preview"))
+        if not lp:
+            emit("message:error", {"reason": "invalid"})
+            return
+        text, media = json.dumps(lp), ""
+    elif mtype in ("image", "video", "voice"):
+        if not is_own_media_url(media):
+            emit("message:error", {"reason": "invalid"})
+            return
+    else:  # plain text
+        media = ""
+        if not text:
+            return
+
     m = Message(sender_id=uid, receiver_id=to, message=text,
                 message_type=mtype, media_url=media)
     db.session.add(m)
@@ -1532,8 +1596,8 @@ def on_message(data):
 @socketio.on("read")
 def on_read(data):
     uid = session.get("user_id")
-    peer = data.get("peer")
-    if uid and peer and str(peer).isdigit():
+    peer = (data or {}).get("peer")
+    if uid and peer and str(peer).isdigit() and int(peer) in _presence_audience(uid):
         Message.query.filter_by(sender_id=int(peer), receiver_id=uid, read_status=False)\
                       .update({"read_status": True})
         db.session.commit()

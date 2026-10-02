@@ -1,13 +1,33 @@
-from models import db, User, VoiceEffect, FanCardDesign
+from models import db, User, Connection, VoiceEffect, FanCardDesign
 from sqlalchemy import text, inspect
 
 def init_db(app):
     with app.app_context():
         db.create_all()
         migrate_columns()
+        sync_connections()
         seed_admin(app)
         seed_voice_effects()
         seed_fan_card_designs()
+
+def sync_connections():
+    """Older admin assignments set users.assigned_public_figure_id without a Connection row,
+    so the public figure could not open that chat. Create the missing rows."""
+    try:
+        made = 0
+        for u in User.query.filter(User.assigned_public_figure_id.isnot(None)).all():
+            has = Connection.query.filter_by(user_id=u.id, public_figure_id=u.assigned_public_figure_id, active=True).first()
+            if not has:
+                db.session.add(Connection(user_id=u.id, public_figure_id=u.assigned_public_figure_id,
+                                          assigned_by=None, active=True))
+                made += 1
+        if made:
+            db.session.commit()
+            print("[BOOT] Synced %d missing connection(s)" % made)
+    except Exception as e:
+        db.session.rollback()
+        print("[BOOT] sync_connections skipped:", e)
+
 
 def migrate_columns():
     """Add any new columns to existing tables (additive only; works on SQLite and Postgres)."""

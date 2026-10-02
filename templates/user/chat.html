@@ -14,8 +14,8 @@
       </div>
     </div>
     <div class="chat-actions">
-      <button onclick="GlobalCall.startOutgoing({{ peer.id }}, '{{ peer.full_name|e }}', {{ 'true' if peer.profile_photo else 'false' }}, '{{ peer.profile_photo or '' }}', 'voice')" class="icon-btn"><i class="fa-solid fa-phone"></i></button>
-      <button onclick="GlobalCall.startOutgoing({{ peer.id }}, '{{ peer.full_name|e }}', {{ 'true' if peer.profile_photo else 'false' }}, '{{ peer.profile_photo or '' }}', 'video')" class="icon-btn"><i class="fa-solid fa-video"></i></button>
+      <button onclick='GlobalCall.startOutgoing({{ peer.id }}, {{ peer.full_name|tojson }}, {{ 'true' if peer.profile_photo else 'false' }}, {{ (peer.profile_photo or '')|tojson }}, "voice")' class="icon-btn"><i class="fa-solid fa-phone"></i></button>
+      <button onclick='GlobalCall.startOutgoing({{ peer.id }}, {{ peer.full_name|tojson }}, {{ 'true' if peer.profile_photo else 'false' }}, {{ (peer.profile_photo or '')|tojson }}, "video")' class="icon-btn"><i class="fa-solid fa-video"></i></button>
     </div>
   </header>
   <div id="messages" class="messages">
@@ -84,12 +84,12 @@ socket.on('presence', d => { if (d.user_id == PEER) { peerOnline = !!d.online; r
 const msgs = document.getElementById('messages');
 function linkCardHtml(lp) {
   const icon = lp.provider === 'tiktok' ? 'fa-tiktok' : 'fa-youtube';
-  return '<a class="link-preview-card" href="' + lp.url + '" target="_blank" rel="noopener">' +
-    (lp.thumbnail ? '<img src="' + lp.thumbnail + '" class="link-preview-thumb">' : '<div class="link-preview-thumb link-preview-thumb-fallback"><i class="fa-brands ' + icon + '"></i></div>') +
+  return '<a class="link-preview-card" href="' + escapeHtml(lp.url) + '" target="_blank" rel="noopener">' +
+    (lp.thumbnail ? '<img src="' + escapeHtml(lp.thumbnail) + '" class="link-preview-thumb">' : '<div class="link-preview-thumb link-preview-thumb-fallback"><i class="fa-brands ' + icon + '"></i></div>') +
     '<div class="link-preview-info"><i class="fa-brands ' + icon + ' link-preview-icon"></i><span>' + escapeHtml(lp.title || lp.url) + '</span></div></a>';
 }
 function voiceNoteHtml(src) {
-  return '<div class="voice-note"><div class="voice-note-icon"><i class="fa-solid fa-microphone"></i></div><audio src="' + src + '" controls></audio></div>';
+  return '<div class="voice-note"><div class="voice-note-icon"><i class="fa-solid fa-microphone"></i></div><audio src="' + escapeHtml(src) + '" controls></audio></div>';
 }
 function addMsg(m) {
   const div = document.createElement('div');
@@ -98,8 +98,8 @@ function addMsg(m) {
     const lp = m.link_preview || JSON.parse(m.message);
     div.innerHTML = linkCardHtml(lp);
   }
-  else if (m.type === 'image' && m.media) div.innerHTML = '<img src="' + m.media + '" class="msg-media">';
-  else if (m.type === 'video' && m.media && m.sender_id == ME) div.innerHTML = '<video src="' + m.media + '" controls class="msg-media"></video>';
+  else if (m.type === 'image' && m.media) div.innerHTML = '<img src="' + escapeHtml(m.media) + '" class="msg-media">';
+  else if (m.type === 'video' && m.media && m.sender_id == ME) div.innerHTML = '<video src="' + escapeHtml(m.media) + '" controls class="msg-media"></video>';
   else if (m.type === 'voice' && m.media) div.innerHTML = voiceNoteHtml(m.media);
   else if (m.type === 'video' && m.media) div.innerHTML = '<div class="msg-text">[Video sent]</div>';
   else div.innerHTML = '<div class="msg-text">' + escapeHtml(m.message) + '</div>';
