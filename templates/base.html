@@ -68,12 +68,21 @@
     </div>
   </div>
 </div>
+<!-- MediaPipe FaceMesh — loaded from jsDelivr so no external fetch at call time.
+     All WASM binaries are resolved via the locateFile callback in global-call.js
+     pointing to the same CDN path, making this fully functional on Render with no
+     server-side ML dependencies. -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1632090217/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="{{ url_for('static', filename='js/global-call.js') }}"
         data-user-id="{{ current_user.id }}"
         data-user-name="{{ current_user.full_name }}"
         data-is-pf="{{ 'true' if current_user.role == 'public_figure' else 'false' }}"
         data-call-video-url="{{ current_user.call_video_url or '' }}"
+        data-mouth-x="{{ current_user.mouth_x if current_user.mouth_x is not none else '' }}"
+        data-mouth-y="{{ current_user.mouth_y if current_user.mouth_y is not none else '' }}"
         data-ice-servers='{{ ice_servers|tojson }}'></script>
 {% endif %}
 

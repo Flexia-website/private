@@ -36,10 +36,10 @@
     {% endfor %}
   </div>
   <div class="composer">
-    <button class="icon-btn" onclick="document.getElementById('file').click()"><i class="fa-solid fa-plus"></i></button>
-    <input type="file" id="file" hidden onchange="uploadFile(this)">
+    <button class="icon-btn" title="Attach photo or video" onclick="document.getElementById('file').click()"><i class="fa-solid fa-paperclip"></i></button>
+    <input type="file" id="file" hidden onchange="uploadFile(this)" accept="image/*,video/*">
     <button class="icon-btn" id="voiceBtn" title="Record voice note" onclick="toggleVoiceRecording()"><i class="fa-solid fa-microphone"></i></button>
-    <!-- Recording live UI -->
+    <!-- Voice recording live UI -->
     <div id="voiceRecordingUI">
       <div class="voice-rec-dot"></div>
       <span class="voice-rec-timer" id="recTimer">0:00</span>
@@ -47,9 +47,9 @@
         <span></span><span></span><span></span><span></span><span></span><span></span>
         <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
-      <button class="voice-rec-stop" onclick="stopVoiceRecording()" title="Stop & send"><i class="fa-solid fa-stop"></i></button>
+      <button class="voice-rec-stop" onclick="stopVoiceRecording()" title="Stop &amp; send"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
-    <input id="input" placeholder="Type a message" onkeydown="if(event.key==='Enter') sendMsg()">
+    <input id="input" placeholder="Message…" onkeydown="if(event.key==='Enter') sendMsg()">
     <button class="icon-btn primary" onclick="sendMsg()"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
 </div>

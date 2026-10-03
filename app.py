@@ -1824,6 +1824,7 @@ def call_offer(data):
     if caller and caller.is_public_figure and caller.call_video_url and ctype == "video":
         offer_payload["premade"] = True
         offer_payload["video_url"] = caller.call_video_url
+        offer_payload["has_mouth_track"] = True
         if caller.mouth_x is not None and caller.mouth_y is not None:
             offer_payload["mouth_x"] = caller.mouth_x
             offer_payload["mouth_y"] = caller.mouth_y
@@ -1854,6 +1855,7 @@ def call_answer(data):
         if pf and pf.is_public_figure and pf.call_video_url:
             payload["premade"] = True
             payload["video_url"] = pf.call_video_url
+            payload["has_mouth_track"] = True
             if pf.mouth_x is not None and pf.mouth_y is not None:
                 payload["mouth_x"] = pf.mouth_x
                 payload["mouth_y"] = pf.mouth_y

@@ -653,3 +653,319 @@ input[type="file"] { display: none; }
   .chat-header .peer-name { font-size: 14px; }
 }
 .chat-peer small.is-online { color: var(--success); }
+
+/* ═══════════════════════════════════════════════════════════════
+   VIDEO CALL MODAL — FaceTime-style redesign
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Full-screen container */
+#globalCallModal {
+  padding: 0;
+  background: #000;
+  align-items: stretch;
+  justify-content: stretch;
+}
+#globalCallModal .modal-content {
+  max-width: 100%;
+  width: 100%;
+  height: 100%;
+  max-height: 100dvh;
+  padding: 0;
+  border-radius: 0;
+  background: #000;
+  justify-content: flex-end;
+  gap: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Remote full-screen video (peer's video fills the screen) */
+#gcmRemoteVideo.video-call {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  background: #111;
+  z-index: 1;
+  /* NO filter, NO transform effects */
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Avatar/name overlay when no video */
+#gcmAvatarWrap {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+/* Name + status text */
+#globalCallModal h3 {
+  position: absolute;
+  top: 110px;
+  left: 0; right: 0;
+  text-align: center;
+  z-index: 10;
+  font-size: 20px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.9);
+}
+#globalCallModal #gcmStatus {
+  position: absolute;
+  top: 142px;
+  left: 0; right: 0;
+  text-align: center;
+  z-index: 10;
+  font-size: 13px;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+}
+
+/* PiP self-view — top-right corner like FaceTime */
+#gcmLocalVideo.self-video {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top, 16px));
+  right: 16px;
+  width: 88px;
+  height: 118px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  z-index: 20;
+  background: #222;
+  /* Remove any bottom-anchor override */
+  bottom: unset;
+}
+
+/* Gradient overlay so controls are readable */
+#globalCallModal .modal-content::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 220px;
+  background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 100%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Call controls at bottom */
+#globalCallModal .call-controls,
+#globalCallModal #gcmActiveControls {
+  position: absolute;
+  bottom: max(36px, env(safe-area-inset-bottom, 36px));
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  z-index: 20;
+  padding: 0 24px;
+}
+
+/* Larger, pill-shaped control buttons */
+#globalCallModal .call-controls .icon-btn,
+#globalCallModal #gcmActiveControls .icon-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  font-size: 20px;
+  background: rgba(255,255,255,0.18);
+  border: 1.5px solid rgba(255,255,255,0.22);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+  transition: transform .15s, background .15s;
+}
+#globalCallModal .call-controls .icon-btn:active,
+#globalCallModal #gcmActiveControls .icon-btn:active {
+  transform: scale(0.92);
+}
+#globalCallModal .call-controls .icon-btn.danger,
+#globalCallModal #gcmActiveControls .icon-btn.danger {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+/* Incoming video choice buttons */
+#globalCallModal #gcmIncomingVideoChoice {
+  position: absolute;
+  bottom: 110px;
+  left: 0; right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 28px;
+  z-index: 20;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAT COMPOSER — ensure input always visible
+   ═══════════════════════════════════════════════════════════════ */
+
+.composer {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(4,7,13,0.98);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  align-items: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+}
+
+.composer input#input {
+  display: flex !important;
+  flex: 1;
+  padding: 11px 16px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  color: var(--txt);
+  outline: none;
+  font-size: 14px;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VOICE RECORDING UI — full redesign
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Hidden by default, shown via .active class */
+#voiceRecordingUI {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 24px;
+  padding: 8px 14px;
+  animation: voiceSlideIn .2s ease;
+}
+#voiceRecordingUI.active {
+  display: flex;
+}
+@keyframes voiceSlideIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Pulsing red dot */
+.voice-rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  flex-shrink: 0;
+  animation: voiceDotPulse 1s ease-in-out infinite;
+}
+@keyframes voiceDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* Timer */
+.voice-rec-timer {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 32px;
+}
+
+/* Animated waveform bars */
+.voice-waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  height: 28px;
+}
+.voice-waveform span {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(239,68,68,0.7);
+  animation: voiceBar 0.8s ease-in-out infinite;
+  transform-origin: bottom;
+}
+.voice-waveform span:nth-child(1)  { animation-delay: 0.0s; height: 8px; }
+.voice-waveform span:nth-child(2)  { animation-delay: 0.1s; height: 14px; }
+.voice-waveform span:nth-child(3)  { animation-delay: 0.2s; height: 20px; }
+.voice-waveform span:nth-child(4)  { animation-delay: 0.05s; height: 24px; }
+.voice-waveform span:nth-child(5)  { animation-delay: 0.15s; height: 18px; }
+.voice-waveform span:nth-child(6)  { animation-delay: 0.25s; height: 12px; }
+.voice-waveform span:nth-child(7)  { animation-delay: 0.08s; height: 22px; }
+.voice-waveform span:nth-child(8)  { animation-delay: 0.18s; height: 16px; }
+.voice-waveform span:nth-child(9)  { animation-delay: 0.28s; height: 10px; }
+.voice-waveform span:nth-child(10) { animation-delay: 0.12s; height: 20px; }
+.voice-waveform span:nth-child(11) { animation-delay: 0.22s; height: 14px; }
+.voice-waveform span:nth-child(12) { animation-delay: 0.32s; height: 8px; }
+@keyframes voiceBar {
+  0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
+  50%       { transform: scaleY(1);   opacity: 1; }
+}
+
+/* Stop/send button inside recording UI */
+.voice-rec-stop {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform .15s, background .15s;
+}
+.voice-rec-stop:active { transform: scale(0.9); background: #dc2626; }
+
+/* Microphone button active state while recording */
+.icon-btn.recording {
+  background: rgba(239,68,68,0.2) !important;
+  border-color: rgba(239,68,68,0.5) !important;
+  color: #ef4444 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VOICE NOTE PLAYBACK — custom player look
+   ═══════════════════════════════════════════════════════════════ */
+
+.voice-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+  padding: 6px 4px;
+}
+.voice-note-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.15);
+  color: inherit;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.msg.mine .voice-note-icon {
+  background: rgba(255,255,255,0.25);
+}
+.voice-note audio {
+  height: 32px;
+  flex: 1;
+  border-radius: 20px;
+  accent-color: #2b7fff;
+}
+
